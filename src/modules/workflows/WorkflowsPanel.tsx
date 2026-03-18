@@ -1,38 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-
-type Folder = {
-  id: string;
-  name: string;
-  createdAt: string;
-};
-
-type StoredWorkflow = {
-  id: string;
-  folderId: string;
-  fileName: string;
-  workflowName: string | null;
-  jsonText: string;
-  error: string | null;
-  createdAt: string;
-};
-
-type StoreShape = {
-  folders: Folder[];
-  workflows: StoredWorkflow[];
-  selectedFolderId: string | null;
-};
-
-const STORAGE_KEY = "nodlync.workflows.localStore.v1";
-
-const nowIso = () => new Date().toISOString();
-
-const defaultFolderName = "My Workflows";
-
-const createFolder = (name: string): Folder => ({
-  id: crypto.randomUUID(),
-  name,
-  createdAt: nowIso(),
-});
+import {
+  createFolder,
+  createWorkflow,
+  deleteFolderCascade,
+  deleteWorkflow,
+  folderNameExists,
+  listFolders,
+  listWorkflows,
+  type WorkflowsRow,
+} from "../../api/workflowsApi";
 
 const extractWorkflowName = (parsed: any): string | null => {
   if (!parsed || typeof parsed !== "object") return null;
@@ -44,12 +20,11 @@ const extractWorkflowName = (parsed: any): string | null => {
   return null;
 };
 
-const safePrettyJson = (text: string) => {
+const safePrettyJson = (json: any) => {
   try {
-    const parsed = JSON.parse(text);
-    return JSON.stringify(parsed, null, 2);
+    return JSON.stringify(json, null, 2);
   } catch {
-    return text;
+    return String(json ?? "");
   }
 };
 
@@ -68,95 +43,124 @@ const downloadTextFile = (fileName: string, text: string, mime = "application/js
 const WorkflowsPanel = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [folders, setFolders] = useState<Folder[]>(() => {
-    const initial = createFolder(defaultFolderName);
-    return [initial];
-  });
-  const [workflows, setWorkflows] = useState<StoredWorkflow[]>([]);
+  const [folders, setFolders] = useState<WorkflowsRow[]>([]);
+  const [workflows, setWorkflows] = useState<WorkflowsRow[]>([]);
+  const [folderCounts, setFolderCounts] = useState<Record<string, number>>({});
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
 
   const [newFolderName, setNewFolderName] = useState("");
   const [uploadFolderId, setUploadFolderId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [loadingFolders, setLoadingFolders] = useState(true);
+  const [loadingWorkflows, setLoadingWorkflows] = useState(false);
 
-  const [viewer, setViewer] = useState<StoredWorkflow | null>(null);
+  const [viewer, setViewer] = useState<WorkflowsRow | null>(null);
 
-  // Restore store
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) {
-        // select default
-        setSelectedFolderId((prev) => prev ?? folders[0]?.id ?? null);
-        setUploadFolderId((prev) => prev ?? folders[0]?.id ?? null);
+    const load = async () => {
+      setLoadingFolders(true);
+      setUploadError(null);
+      const { data, error } = await listFolders();
+      if (error) {
+        setUploadError(error.message);
+        setFolders([]);
+        setSelectedFolderId(null);
+        setUploadFolderId(null);
+        setLoadingFolders(false);
         return;
       }
-      const parsed: StoreShape = JSON.parse(raw);
-      if (parsed.folders?.length) setFolders(parsed.folders);
-      if (parsed.workflows?.length) setWorkflows(parsed.workflows);
-      setSelectedFolderId(parsed.selectedFolderId ?? (parsed.folders?.[0]?.id ?? null));
-      setUploadFolderId(parsed.selectedFolderId ?? (parsed.folders?.[0]?.id ?? null));
-    } catch {
-      // ignore corrupted storage
-      setSelectedFolderId((prev) => prev ?? folders[0]?.id ?? null);
-      setUploadFolderId((prev) => prev ?? folders[0]?.id ?? null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      const list = (data ?? []).filter((r) => r.type === "folder");
+      setFolders(list);
+      const first = list[0]?.id ?? null;
+      setSelectedFolderId((prev) => prev ?? first);
+      setUploadFolderId((prev) => prev ?? first);
+      setLoadingFolders(false);
+    };
+    void load();
   }, []);
 
-  // Persist store
-  useEffect(() => {
-    const payload: StoreShape = { folders, workflows, selectedFolderId };
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-    } catch {
-      // ignore quota errors
-    }
-  }, [folders, workflows, selectedFolderId]);
+  const refreshCounts = async (folderIds: string[]) => {
+    // Simple counts: query workflows for each folder (fast enough for small sets)
+    const counts: Record<string, number> = {};
+    await Promise.all(
+      folderIds.map(async (fid) => {
+        const { data } = await listWorkflows(fid);
+        counts[fid] = (data ?? []).length;
+      })
+    );
+    setFolderCounts(counts);
+  };
 
-  // Keep upload folder in sync with selection when missing
+  const refreshWorkflows = async (folderId: string | null) => {
+    if (!folderId) {
+      setWorkflows([]);
+      return;
+    }
+    setLoadingWorkflows(true);
+    const { data, error } = await listWorkflows(folderId);
+    if (error) {
+      setUploadError(error.message);
+      setWorkflows([]);
+      setLoadingWorkflows(false);
+      return;
+    }
+    setWorkflows(data ?? []);
+    setLoadingWorkflows(false);
+  };
+
   useEffect(() => {
-    if (!uploadFolderId && folders.length) setUploadFolderId(folders[0].id);
-    if (!selectedFolderId && folders.length) setSelectedFolderId(folders[0].id);
-  }, [folders, uploadFolderId, selectedFolderId]);
+    void refreshWorkflows(selectedFolderId);
+  }, [selectedFolderId]);
+
+  useEffect(() => {
+    if (folders.length) void refreshCounts(folders.map((f) => f.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [folders.length]);
 
   const selectedFolder = useMemo(
     () => folders.find((f) => f.id === selectedFolderId) ?? null,
     [folders, selectedFolderId]
   );
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, StoredWorkflow[]>();
-    folders.forEach((f) => map.set(f.id, []));
-    workflows.forEach((w) => {
-      if (!map.has(w.folderId)) map.set(w.folderId, []);
-      map.get(w.folderId)!.push(w);
-    });
-    // newest first
-    map.forEach((arr) =>
-      arr.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
-    );
-    return map;
-  }, [folders, workflows]);
-
   const handleCreateFolder = () => {
-    const name = newFolderName.trim();
-    if (!name) return;
-    if (folders.some((f) => f.name.toLowerCase() === name.toLowerCase())) {
-      setUploadError("Folder name already exists.");
-      return;
-    }
-    const folder = createFolder(name);
-    setFolders((prev) => [...prev, folder]);
-    setNewFolderName("");
-    setSelectedFolderId(folder.id);
-    setUploadFolderId(folder.id);
-    setUploadError(null);
+    const run = async () => {
+      const name = newFolderName.trim();
+      if (!name) return;
+      setUploadError(null);
+      const exists = await folderNameExists(name);
+      if (exists) {
+        setUploadError("Folder name already exists.");
+        return;
+      }
+      const { data, error } = await createFolder(name);
+      if (error) {
+        setUploadError(error.message);
+        return;
+      }
+      if (data) {
+        setFolders((prev) => [...prev, data]);
+        setNewFolderName("");
+        setSelectedFolderId(data.id);
+        setUploadFolderId(data.id);
+        setFolderCounts((prev) => ({ ...prev, [data.id]: 0 }));
+      }
+    };
+    void run();
   };
 
   const handleDeleteWorkflow = (id: string) => {
-    setWorkflows((prev) => prev.filter((w) => w.id !== id));
+    const run = async () => {
+      await deleteWorkflow(id);
+      setWorkflows((prev) => prev.filter((w) => w.id !== id));
+      if (selectedFolderId) {
+        setFolderCounts((prev) => ({
+          ...prev,
+          [selectedFolderId]: Math.max(0, (prev[selectedFolderId] ?? 0) - 1),
+        }));
+      }
+    };
+    void run();
     if (viewer?.id === id) setViewer(null);
   };
 
@@ -181,39 +185,60 @@ const WorkflowsPanel = () => {
     setUploadError(null);
 
     try {
-      const results: StoredWorkflow[] = [];
+      const invalidFiles: string[] = [];
+      const created: WorkflowsRow[] = [];
       for (const file of list) {
         const text = await file.text();
-        let workflowName: string | null = null;
-        let error: string | null = null;
+        let parsed: any;
         try {
-          const parsed = JSON.parse(text);
-          workflowName = extractWorkflowName(parsed);
+          parsed = JSON.parse(text);
         } catch (e: any) {
-          error = e?.message || "Invalid JSON";
+          invalidFiles.push(`${file.name}: ${e?.message || "Invalid JSON"}`);
+          continue;
         }
-        results.push({
-          id: crypto.randomUUID(),
-          folderId,
-          fileName: file.name,
-          workflowName,
-          jsonText: text,
-          error,
-          createdAt: nowIso(),
+
+        const workflowName = extractWorkflowName(parsed) ?? file.name.replace(/\.json$/i, "");
+        const json_data = {
+          ...parsed,
+          __nodlync: {
+            fileName: file.name,
+            importedAt: new Date().toISOString(),
+          },
+        };
+
+        const { data, error } = await createWorkflow({
+          name: workflowName,
+          parent_id: folderId,
+          json_data,
         });
+        if (error) {
+          invalidFiles.push(`${file.name}: ${error.message}`);
+          continue;
+        }
+        if (data) created.push(data);
       }
-      setWorkflows((prev) => [...results, ...prev]);
+
+      if (invalidFiles.length) {
+        setUploadError(`Some files were skipped:\n${invalidFiles.join("\n")}`);
+      }
+
+      if (created.length) {
+        // If currently viewing this folder, prepend
+        if (selectedFolderId === folderId) {
+          setWorkflows((prev) => [...created, ...prev]);
+        }
+        setFolderCounts((prev) => ({
+          ...prev,
+          [folderId]: (prev[folderId] ?? 0) + created.length,
+        }));
+      }
+
       setSelectedFolderId(folderId);
       if (fileInputRef.current) fileInputRef.current.value = "";
     } finally {
       setUploading(false);
     }
   };
-
-  const visibleWorkflows = useMemo(() => {
-    if (!selectedFolderId) return workflows;
-    return grouped.get(selectedFolderId) ?? [];
-  }, [grouped, workflows, selectedFolderId]);
 
   return (
     <div className="h-[calc(100vh-theme(spacing.16))] grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)] gap-6">
@@ -227,7 +252,7 @@ const WorkflowsPanel = () => {
             </h2>
           </div>
           <p className="text-sm text-slate-400 mt-2">
-            Upload and organize n8n workflow exports (.json) locally.
+            Upload and organize n8n workflow exports (.json) in Supabase.
           </p>
         </div>
 
@@ -255,25 +280,74 @@ const WorkflowsPanel = () => {
         </div>
 
         <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
-          {folders.map((f) => {
-            const active = f.id === selectedFolderId;
-            const count = grouped.get(f.id)?.length ?? 0;
-            return (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setSelectedFolderId(f.id)}
-                className={`w-full text-left px-3 py-2.5 rounded-lg border transition flex items-center justify-between gap-3 ${
-                  active
-                    ? "bg-primary/15 border-primary/30 text-primary"
-                    : "bg-surface/30 border-slate-800 text-slate-200 hover:bg-slate-800/40"
-                }`}
-              >
-                <span className="font-medium truncate">{f.name}</span>
-                <span className="text-xs text-slate-500 tabular-nums">{count}</span>
-              </button>
-            );
-          })}
+          {loadingFolders ? (
+            <div className="p-4 text-sm text-slate-500">Loading folders...</div>
+          ) : folders.length === 0 ? (
+            <div className="p-4 text-sm text-slate-500">
+              No folders yet. Create one above.
+            </div>
+          ) : (
+            folders.map((f) => {
+              const active = f.id === selectedFolderId;
+              const count = folderCounts[f.id] ?? 0;
+              return (
+                <div
+                  key={f.id}
+                  className={`group w-full px-3 py-2.5 rounded-lg border transition flex items-center justify-between gap-3 ${
+                    active
+                      ? "bg-primary/15 border-primary/30 text-primary"
+                      : "bg-surface/30 border-slate-800 text-slate-200 hover:bg-slate-800/40"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSelectedFolderId(f.id)}
+                    className="flex-1 text-left min-w-0"
+                    title={f.name}
+                  >
+                    <span className="font-medium truncate block">{f.name}</span>
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500 tabular-nums">{count}</span>
+                    <button
+                      type="button"
+                      className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-rose-400 transition"
+                      title="Delete folder (and all workflows inside)"
+                      onClick={() => {
+                        const ok = window.confirm(
+                          `Delete folder "${f.name}" and all workflows inside?`
+                        );
+                        if (!ok) return;
+                        const run = async () => {
+                          const { error } = await deleteFolderCascade(f.id);
+                          if (error) {
+                            setUploadError(error.message);
+                            return;
+                          }
+                          setFolders((prev) => prev.filter((x) => x.id !== f.id));
+                          setFolderCounts((prev) => {
+                            const next = { ...prev };
+                            delete next[f.id];
+                            return next;
+                          });
+                          if (selectedFolderId === f.id) {
+                            const remaining = folders.filter((x) => x.id !== f.id);
+                            const nextId = remaining[0]?.id ?? null;
+                            setSelectedFolderId(nextId);
+                            setUploadFolderId(nextId);
+                            setWorkflows([]);
+                          }
+                        };
+                        void run();
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
 
@@ -334,9 +408,13 @@ const WorkflowsPanel = () => {
         ) : null}
 
         <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
-          {visibleWorkflows.length === 0 ? (
+          {loadingWorkflows ? (
+            <div className="p-8 text-sm text-slate-500">Loading workflows...</div>
+          ) : workflows.length === 0 ? (
             <div className="glass-panel p-10 text-center text-slate-500 border-dashed">
-              No workflows in this folder yet. Upload one or more `.json` exports to get started.
+              {selectedFolderId
+                ? "No workflows in this folder yet. Upload one or more `.json` exports to get started."
+                : "Create or select a folder to start uploading workflows."}
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-slate-800">
@@ -351,27 +429,30 @@ const WorkflowsPanel = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-surface/60 divide-y divide-slate-800">
-                    {visibleWorkflows.map((w) => (
+                    {workflows.map((w) => {
+                      const fileName = w.json_data?.__nodlync?.fileName ?? "workflow.json";
+                      const isInvalid = !w.json_data;
+                      return (
                       <tr key={w.id} className="hover:bg-slate-800/20 transition">
                         <td className="px-4 py-3">
                           <div className="min-w-0">
                             <p className="text-sm font-semibold text-slate-100 truncate">
-                              {w.workflowName ?? "Unnamed workflow"}
+                              {w.name || "Unnamed workflow"}
                             </p>
                             <p className="text-xs text-slate-500 truncate">
-                              Added {new Date(w.createdAt).toLocaleString()}
+                              Added {new Date(w.created_at).toLocaleString()}
                             </p>
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <p className="text-sm text-slate-300 font-mono truncate" title={w.fileName}>
-                            {w.fileName}
+                          <p className="text-sm text-slate-300 font-mono truncate" title={fileName}>
+                            {fileName}
                           </p>
                         </td>
                         <td className="px-4 py-3">
-                          {w.error ? (
+                          {isInvalid ? (
                             <span className="inline-flex items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-200">
-                              Invalid JSON
+                              Invalid
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-200">
@@ -391,7 +472,12 @@ const WorkflowsPanel = () => {
                             <button
                               type="button"
                               className="btn-ghost px-3 py-1.5 text-xs"
-                              onClick={() => downloadTextFile(w.fileName, w.jsonText)}
+                              onClick={() =>
+                                downloadTextFile(
+                                  fileName,
+                                  JSON.stringify(w.json_data ?? {}, null, 2)
+                                )
+                              }
                             >
                               Download
                             </button>
@@ -399,7 +485,9 @@ const WorkflowsPanel = () => {
                               type="button"
                               className="inline-flex items-center justify-center rounded-lg border border-rose-500/30 px-3 py-1.5 text-xs text-rose-200 transition hover:bg-rose-500/10"
                               onClick={() => {
-                                const ok = window.confirm(`Delete "${w.fileName}" from this folder?`);
+                                const ok = window.confirm(
+                                  `Delete "${fileName}" from this folder?`
+                                );
                                 if (ok) handleDeleteWorkflow(w.id);
                               }}
                             >
@@ -408,7 +496,8 @@ const WorkflowsPanel = () => {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -425,9 +514,11 @@ const WorkflowsPanel = () => {
               <div className="min-w-0">
                 <p className="text-sm text-slate-400">Workflow</p>
                 <p className="text-lg font-semibold text-slate-100 truncate">
-                  {viewer.workflowName ?? "Unnamed workflow"}
+                  {viewer.name || "Unnamed workflow"}
                 </p>
-                <p className="text-xs text-slate-500 font-mono truncate">{viewer.fileName}</p>
+                <p className="text-xs text-slate-500 font-mono truncate">
+                  {viewer.json_data?.__nodlync?.fileName ?? "workflow.json"}
+                </p>
               </div>
               <button
                 type="button"
@@ -438,17 +529,9 @@ const WorkflowsPanel = () => {
               </button>
             </div>
 
-            {viewer.error ? (
-              <div className="px-5 pt-4">
-                <div className="rounded-md border border-rose-700 bg-rose-900/30 px-3 py-2 text-xs text-rose-100">
-                  JSON parse error: {viewer.error}
-                </div>
-              </div>
-            ) : null}
-
             <div className="p-5">
               <pre className="rounded-xl border border-slate-800 bg-slate-950/70 max-h-[65vh] overflow-auto text-xs font-mono text-slate-100 px-4 py-3 whitespace-pre-wrap break-words">
-                {safePrettyJson(viewer.jsonText)}
+                {safePrettyJson(viewer.json_data ?? {})}
               </pre>
             </div>
           </div>
