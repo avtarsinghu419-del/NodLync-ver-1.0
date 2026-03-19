@@ -9,6 +9,7 @@ import {
   listWorkflows,
   type WorkflowsRow,
 } from "../../api/workflowsApi";
+import WorkflowReactFlowView from "./WorkflowReactFlowView";
 
 const extractWorkflowName = (parsed: any): string | null => {
   if (!parsed || typeof parsed !== "object") return null;
@@ -40,6 +41,19 @@ const downloadTextFile = (fileName: string, text: string, mime = "application/js
   URL.revokeObjectURL(url);
 };
 
+const stripN8nMeta = (json: any) => {
+  if (!json || typeof json !== "object") return json;
+  if (Array.isArray(json)) return json;
+  const clone: any = { ...json };
+  if (clone.__nodlync) delete clone.__nodlync;
+  return clone;
+};
+
+const getFileNameFromJson = (json: any) => {
+  const v = json?.__nodlync?.fileName;
+  return typeof v === "string" && v.trim() ? v : "workflow.json";
+};
+
 const WorkflowsPanel = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -56,6 +70,7 @@ const WorkflowsPanel = () => {
   const [loadingWorkflows, setLoadingWorkflows] = useState(false);
 
   const [viewer, setViewer] = useState<WorkflowsRow | null>(null);
+  const [viewerTab, setViewerTab] = useState<"json" | "visual">("json");
 
   useEffect(() => {
     const load = async () => {
@@ -393,7 +408,7 @@ const WorkflowsPanel = () => {
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading || folders.length === 0}
               >
-                {uploading ? "Uploading..." : "Upload .json"}
+                {uploading ? "Uploading..." : "Upload"}
               </button>
             </div>
           </div>
@@ -417,24 +432,19 @@ const WorkflowsPanel = () => {
                 : "Create or select a folder to start uploading workflows."}
             </div>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-slate-800">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-800">
-                  <thead className="bg-slate-900/80">
-                    <tr className="text-left text-xs uppercase tracking-[0.18em] text-slate-500">
-                      <th className="px-4 py-3 font-medium">Workflow</th>
-                      <th className="px-4 py-3 font-medium">File</th>
-                      <th className="px-4 py-3 font-medium">Status</th>
-                      <th className="px-4 py-3 font-medium text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-surface/60 divide-y divide-slate-800">
-                    {workflows.map((w) => {
-                      const fileName = w.json_data?.__nodlync?.fileName ?? "workflow.json";
-                      const isInvalid = !w.json_data;
-                      return (
-                      <tr key={w.id} className="hover:bg-slate-800/20 transition">
-                        <td className="px-4 py-3">
+            <div className="overflow-hidden rounded-xl border border-slate-800 bg-surface/20">
+              <div className="p-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {workflows.map((w) => {
+                    const fileName = getFileNameFromJson(w.json_data);
+                    const isInvalid = !w.json_data;
+                    const jsonWithoutMeta = stripN8nMeta(w.json_data);
+                    return (
+                      <div
+                        key={w.id}
+                        className="glass-panel p-4 flex flex-col gap-3 rounded-xl border border-slate-800/60 bg-slate-950/10"
+                      >
+                        <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <p className="text-sm font-semibold text-slate-100 truncate">
                               {w.name || "Unnamed workflow"}
@@ -443,39 +453,46 @@ const WorkflowsPanel = () => {
                               Added {new Date(w.created_at).toLocaleString()}
                             </p>
                           </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <p className="text-sm text-slate-300 font-mono truncate" title={fileName}>
-                            {fileName}
-                          </p>
-                        </td>
-                        <td className="px-4 py-3">
                           {isInvalid ? (
-                            <span className="inline-flex items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-200">
+                            <span className="inline-flex items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-[11px] text-rose-200">
                               Invalid
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-200">
+                            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[11px] text-emerald-200">
                               Ready
                             </span>
                           )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              type="button"
-                              className="btn-ghost px-3 py-1.5 text-xs"
-                              onClick={() => setViewer(w)}
-                            >
-                              View
-                            </button>
+                        </div>
+
+                        <div className="min-w-0">
+                          <p
+                            className="text-sm text-slate-300 font-mono truncate"
+                            title={fileName}
+                          >
+                            {fileName}
+                          </p>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between mt-auto">
+                          <button
+                            type="button"
+                            className="btn-ghost px-3 py-1.5 text-xs"
+                            onClick={() => {
+                              setViewer(w);
+                              setViewerTab("json");
+                            }}
+                          >
+                            View
+                          </button>
+
+                          <div className="flex items-center gap-2 justify-end">
                             <button
                               type="button"
                               className="btn-ghost px-3 py-1.5 text-xs"
                               onClick={() =>
                                 downloadTextFile(
                                   fileName,
-                                  JSON.stringify(w.json_data ?? {}, null, 2)
+                                  JSON.stringify(jsonWithoutMeta ?? {}, null, 2)
                                 )
                               }
                             >
@@ -494,12 +511,11 @@ const WorkflowsPanel = () => {
                               Delete
                             </button>
                           </div>
-                        </td>
-                      </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
@@ -517,7 +533,7 @@ const WorkflowsPanel = () => {
                   {viewer.name || "Unnamed workflow"}
                 </p>
                 <p className="text-xs text-slate-500 font-mono truncate">
-                  {viewer.json_data?.__nodlync?.fileName ?? "workflow.json"}
+                  {getFileNameFromJson(viewer.json_data)}
                 </p>
               </div>
               <button
@@ -529,10 +545,47 @@ const WorkflowsPanel = () => {
               </button>
             </div>
 
-            <div className="p-5">
-              <pre className="rounded-xl border border-slate-800 bg-slate-950/70 max-h-[65vh] overflow-auto text-xs font-mono text-slate-100 px-4 py-3 whitespace-pre-wrap break-words">
-                {safePrettyJson(viewer.json_data ?? {})}
-              </pre>
+            <div className="p-5 space-y-4">
+              <div className="inline-flex rounded-lg bg-slate-900/70 border border-slate-800 text-xs overflow-hidden">
+                <button
+                  type="button"
+                  className={`px-4 py-2 border-r border-slate-800 ${
+                    viewerTab === "json"
+                      ? "bg-slate-800 text-slate-100"
+                      : "text-slate-400 hover:text-slate-100"
+                  }`}
+                  onClick={() => setViewerTab("json")}
+                >
+                  JSON View
+                </button>
+                <button
+                  type="button"
+                  className={`px-4 py-2 ${
+                    viewerTab === "visual"
+                      ? "bg-slate-800 text-slate-100"
+                      : "text-slate-400 hover:text-slate-100"
+                  }`}
+                  onClick={() => setViewerTab("visual")}
+                >
+                  Visual View
+                </button>
+              </div>
+
+              {viewerTab === "json" ? (
+                <pre className="rounded-xl border border-slate-800 bg-slate-950/70 max-h-[65vh] overflow-auto text-xs font-mono text-slate-100 px-4 py-3 whitespace-pre-wrap break-words">
+                  {safePrettyJson(stripN8nMeta(viewer.json_data ?? {}))}
+                </pre>
+              ) : (
+                <div>
+                  {viewer.json_data ? (
+                    <WorkflowReactFlowView workflowJson={stripN8nMeta(viewer.json_data)} />
+                  ) : (
+                    <div className="text-sm text-slate-500 p-6">
+                      Visual view not available.
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
