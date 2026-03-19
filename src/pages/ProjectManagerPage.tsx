@@ -1,122 +1,321 @@
-﻿import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import { getProjects } from "../api/projectsApi";
 import {
-  createDailyLog,
-  createProjectActivity,
-  createTaskItem,
-  deleteTaskItem,
-  getProjectActivities,
-  getProjectNotes,
+  getMilestones,
   getTaskItems,
+  getProjectLogs,
+  getAllProjectLogs,
+  getProjectLogsPage,
+  getProjectMembers,
+  createMilestone,
+  updateMilestone,
+  deleteMilestone,
+  createTaskItem,
   updateTaskItem,
-  type DailyLogPayload,
-  type ProjectActivity,
-  type ProjectNote,
+  deleteTaskItem,
+  createProjectLog,
+  createProjectReport,
+  type Milestone,
   type TaskItem,
+  type ProjectLog,
+  type ProjectMember,
 } from "../api/projectManagerApi";
 import InlineSpinner from "../components/InlineSpinner";
-import ActivityFeed from "../modules/projects/manager/ActivityFeed";
-import MilestonesCard from "../modules/projects/manager/MilestonesCard";
 import ProjectHeader from "../modules/projects/manager/ProjectHeader";
 import ProjectTabs, { type TabId } from "../modules/projects/manager/ProjectTabs";
-import ReportsCard from "../modules/projects/manager/ReportsCard";
+import MilestonesCard from "../modules/projects/manager/MilestonesCard";
 import TasksPanel from "../modules/projects/manager/TasksPanel";
-import TeamCard, { type TeamMember } from "../modules/projects/manager/TeamCard";
+import TeamCard from "../modules/projects/manager/TeamCard";
 import WorkLogCard from "../modules/projects/manager/WorkLogCard";
+import ReportsCard from "../modules/projects/manager/ReportsCard";
 import useAppStore from "../store/useAppStore";
 import type { Project } from "../types";
 import { formatDateTime } from "../utils/format";
 
-interface OverviewProps {
+const HistoryList = ({
+  project,
+  logs,
+  page,
+  pageSize,
+  total,
+  onPageChange,
+  onDeleteSelected,
+  onExportSelected,
+}: {
   project: Project;
-  tasks: TaskItem[];
-  milestones: TaskItem[];
-  notes: ProjectNote[];
-  activities: ProjectActivity[];
-  userId: string;
-  onLogSubmit: (log: DailyLogPayload) => Promise<void>;
-  onMilestoneAdd: (title: string) => Promise<void>;
-  onMilestoneToggle: (milestone: TaskItem) => Promise<void>;
-  onMilestoneDelete: (id: string) => Promise<void>;
-  onMilestoneBulkDelete: (ids: string[]) => Promise<void>;
-  onGenerateReport: (type: "today" | "full") => Promise<string>;
-  logBusy: boolean;
-  lastLogAt: string | null;
+  logs: ProjectLog[];
+  page: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (page: number) => Promise<void>;
+  onDeleteSelected: (ids: string[]) => Promise<void>;
+  onExportSelected: (ids: string[]) => void;
+}) => {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  const toggleOne = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const togglePage = () => {
+    const ids = logs.map((l) => l.id);
+    const allSelected = ids.every((id) => selected.has(id));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allSelected) ids.forEach((id) => next.delete(id));
+      else ids.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const clear = () => setSelected(new Set());
+
+  const selectedIds = Array.from(selected);
+  const startItem = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const endItem = Math.min(total, page * pageSize);
+
+  return (
+    <div className="space-y-4">
+      {selectedIds.length > 0 && (
+        <div className="glass-panel p-3 flex items-center justify-between">
+          <div className="text-xs text-slate-400">
+            {selectedIds.length} selected
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              className="btn-ghost text-xs"
+              onClick={() => onExportSelected(selectedIds)}
+            >
+              Export Selected
+            </button>
+            <button
+              className="btn-ghost text-xs text-rose-400 hover:text-rose-300"
+              onClick={async () => {
+                if (!window.confirm(`Delete ${selectedIds.length} selected log(s)?`)) return;
+                await onDeleteSelected(selectedIds);
+                clear();
+              }}
+            >
+              Delete Selected
+            </button>
+            <button className="btn-ghost text-xs" onClick={clear}>
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="glass-panel divide-y divide-slate-800">
+        <div className="flex items-center gap-3 px-4 py-3 text-xs uppercase tracking-[0.18em] text-slate-500">
+          <input
+            type="checkbox"
+            checked={logs.length > 0 && logs.every((l) => selected.has(l.id))}
+            onChange={togglePage}
+            className="h-4 w-4 accent-primary"
+            aria-label="Select all visible logs"
+          />
+          <span>Visible logs</span>
+        </div>
+        {logs.map((log) => (
+          <div key={log.id} className="px-4 py-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={selected.has(log.id)}
+                  onChange={() => toggleOne(log.id)}
+                  className="h-4 w-4 accent-primary"
+                  aria-label={`Select log ${log.created_at}`}
+                />
+                <span className="text-xs text-slate-500 font-mono">
+                  {formatDateTime(log.created_at)}
+                </span>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <div className="text-[10px] text-emerald-400 uppercase font-bold mb-1">Completed</div>
+                <div className="text-sm text-slate-300 whitespace-pre-wrap">{log.completed_work || ""}</div>
+              </div>
+              <div>
+                <div className="text-[10px] text-amber-400 uppercase font-bold mb-1">Next Steps</div>
+                <div className="text-sm text-slate-300 whitespace-pre-wrap">{log.next_steps || ""}</div>
+              </div>
+              <div>
+                <div className="text-[10px] text-rose-400 uppercase font-bold mb-1">Blockers</div>
+                <div className="text-sm text-slate-300 whitespace-pre-wrap">{log.blockers || ""}</div>
+              </div>
+              <div>
+                <div className="text-[10px] text-slate-400 uppercase font-bold mb-1">Notes</div>
+                <div className="text-sm text-slate-300 whitespace-pre-wrap">{log.notes || ""}</div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="glass-panel p-4 flex items-center justify-between">
+        <div className="text-xs text-slate-500">
+          Showing {startItem}-{endItem} of {total} for {project.name}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            className="btn-ghost text-xs"
+            disabled={page <= 1}
+            onClick={() => onPageChange(page - 1)}
+          >
+            Prev
+          </button>
+          <span className="text-xs text-slate-500 font-mono">
+            {page}/{totalPages}
+          </span>
+          <button
+            className="btn-ghost text-xs"
+            disabled={page >= totalPages}
+            onClick={() => onPageChange(page + 1)}
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+function downloadTxt(filename: string, content: string) {
+  const blob = new Blob([content], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 const OverviewTab = ({
   project,
   tasks,
   milestones,
-  notes,
-  activities,
-  userId,
+  logs,
   onLogSubmit,
-  onMilestoneAdd,
-  onMilestoneToggle,
-  onMilestoneDelete,
-  onMilestoneBulkDelete,
-  onGenerateReport,
-  logBusy,
-  lastLogAt,
-}: OverviewProps) => {
-  const teamMembers: TeamMember[] = [
-    { id: userId, email: project.user_id, role: "Owner", avatarColor: "" },
-  ];
+  userId,
+  onAddMilestone,
+  onUpdateMilestone,
+  onDeleteMilestone,
+}: {
+  project: Project;
+  tasks: TaskItem[];
+  milestones: Milestone[];
+  logs: ProjectLog[];
+  onLogSubmit: (payload: any) => Promise<void>;
+  userId: string;
+  onAddMilestone: (title: string) => Promise<void>;
+  onUpdateMilestone: (m: any) => Promise<void>;
+  onDeleteMilestone: (id: string) => Promise<void>;
+}) => {
+  const completedTasks = tasks.filter(t => t.status === "done").length;
+  const progress = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
+  
+  const lastCompletedMilestone = [...milestones].reverse().find(m => m.status === 'completed');
+  const inProgressMilestone = milestones.find(m => m.status === 'in_progress');
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[1fr,320px] gap-5">
-      <div className="space-y-5 min-w-0">
-        <div className="glass-panel p-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <span className="text-base">Pin</span>
-            <h3 className="font-semibold text-slate-200">Project Description</h3>
+    <div className="grid grid-cols-1 xl:grid-cols-[1fr,350px] gap-6">
+      <div className="space-y-6">
+        {/* Project Summary */}
+        <div className="glass-panel p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-bold text-slate-100">{project.name}</h2>
+              <p className="text-sm text-slate-400">Current Status: <span className="text-primary font-medium capitalize">{project.status}</span></p>
+            </div>
+            <div className="text-right">
+              <span className="text-3xl font-bold text-primary">{progress}%</span>
+              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Overall Progress</p>
+            </div>
           </div>
+          <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+            <div className="h-full bg-primary transition-all duration-500" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
 
-          <p className="text-sm text-slate-300 leading-relaxed">
-            {project.description?.trim() || (
-              <span className="italic text-slate-500">No description added. Edit this project to add one.</span>
-            )}
-          </p>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-3 border-t border-slate-800">
-            <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Start Date</p>
-              <p className="text-sm text-slate-200 font-medium">{formatDateTime(project.created_at ?? "")}</p>
+        {/* Recent Milestones */}
+        <div className="glass-panel p-6">
+          <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">Milestone Pulse</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-800/50">
+              <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Last Completed</p>
+              <p className="text-slate-200 font-medium">{lastCompletedMilestone?.title || "No milestones completed yet"}</p>
             </div>
-            <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Last Updated</p>
-              <p className="text-sm text-slate-200 font-medium">{formatDateTime(project.updated_at ?? project.created_at ?? "")}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Total Tasks</p>
-              <p className="text-sm text-slate-200 font-medium">{tasks.length} task{tasks.length !== 1 ? "s" : ""}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Velocity</p>
-              <p className="text-sm text-primary font-semibold">{tasks.filter((task) => task.status === "done").length} done</p>
+            <div className="bg-primary/5 p-4 rounded-xl border border-primary/10">
+              <p className="text-[10px] text-primary/70 uppercase font-bold mb-1 font-mono">Current Phase</p>
+              <p className="text-primary font-semibold">{inProgressMilestone?.title || "No milestone in progress"}</p>
             </div>
           </div>
         </div>
 
-        <WorkLogCard onSubmit={onLogSubmit} busy={logBusy} lastSubmitted={lastLogAt} />
-        <ActivityFeed activities={activities} notes={notes} compact={false} />
+        {/* Daily Log Input */}
+        <WorkLogCard onSubmit={onLogSubmit} />
+
+        {/* Recent Work Logs (Last 5 days approx) */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Recent Activity Logs</h3>
+            <span className="text-[10px] text-slate-500 font-mono">Last {logs.length} entries</span>
+          </div>
+          {logs.length === 0 ? (
+            <div className="glass-panel p-8 text-center text-slate-500 text-sm">No work logs recorded yet.</div>
+          ) : (
+            logs.map(log => (
+              <div key={log.id} className="glass-panel p-5 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <span className="text-xs font-bold text-primary">Team Member</span>
+                  <span className="text-[10px] text-slate-500 font-mono">{formatDateTime(log.created_at)}</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div>
+                    <h4 className="text-[10px] text-emerald-400 uppercase font-bold mb-1">Completed</h4>
+                    <p className="text-sm text-slate-300 leading-relaxed">{log.completed_work}</p>
+                  </div>
+                  <div>
+                    <h4 className="text-[10px] text-amber-400 uppercase font-bold mb-1">Next Steps</h4>
+                    <p className="text-sm text-slate-300 leading-relaxed">{log.next_steps}</p>
+                  </div>
+                  <div>
+                    <h4 className="text-[10px] text-rose-400 uppercase font-bold mb-1">Blockers</h4>
+                    <p className="text-sm text-slate-300 leading-relaxed">{log.blockers || <span className="italic opacity-30">None</span>}</p>
+                  </div>
+                </div>
+                {log.notes && (
+                  <div className="pt-2 border-t border-slate-800/50">
+                    <p className="text-xs text-slate-500 italic">{log.notes}</p>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-6">
         <MilestonesCard
-          milestones={milestones}
-          projectId={project.id}
-          userId={userId}
-          onAdd={onMilestoneAdd}
-          onToggle={onMilestoneToggle}
-          onDelete={onMilestoneDelete}
-          onBulkDelete={onMilestoneBulkDelete}
+         milestones={milestones.map(m => ({ ...m, item_type: 'milestone' } as any))}
+         projectId={project.id}
+         userId={userId}
+         onAdd={onAddMilestone}
+         onToggle={(m: any) => onUpdateMilestone({ ...m, status: m.status === 'completed' ? 'in_progress' : 'completed' })}
+         onDelete={onDeleteMilestone}
+         onBulkDelete={async (ids) => { for(const mid of ids) await onDeleteMilestone(mid); }}
         />
-        <ReportsCard project={project} onGenerateReport={onGenerateReport} />
-        <TeamCard members={teamMembers} />
-        <ActivityFeed activities={activities} notes={notes} compact={true} />
+        <TeamCard members={[]} />
       </div>
     </div>
   );
@@ -124,237 +323,260 @@ const OverviewTab = ({
 
 const ProjectManagerPage = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const { user, projects, setProjects } = useAppStore();
+  const { user } = useAppStore();
 
   const [project, setProject] = useState<Project | null>(null);
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [notes, setNotes] = useState<ProjectNote[]>([]);
-  const [activities, setActivities] = useState<ProjectActivity[]>([]);
+  const [logs, setLogs] = useState<ProjectLog[]>([]);
+  const [members, setMembers] = useState<ProjectMember[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [logBusy, setLogBusy] = useState(false);
-  const [lastLogAt, setLastLogAt] = useState<string | null>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPageSize] = useState(10);
+  const [historyLogs, setHistoryLogs] = useState<ProjectLog[]>([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
-  const taskItems = tasks.filter((task) => task.item_type === "task");
-  const milestones = tasks.filter((task) => task.item_type === "milestone");
-  const completedTasks = taskItems.filter((task) => task.status === "done").length;
-  const progress = taskItems.length > 0 ? Math.round((completedTasks / taskItems.length) * 100) : 0;
-
-  useEffect(() => {
+  const loadAll = useCallback(async () => {
     if (!id || !user) return;
-
-    const resolveProject = async (): Promise<Project | null> => {
-      const fromStore = projects.find((entry) => entry.id === id);
-      if (fromStore) return fromStore;
-      const { data } = await getProjects(user.id);
-      const list = (data ?? []) as Project[];
-      if (list.length) setProjects(list);
-      return list.find((entry) => entry.id === id) ?? null;
-    };
-
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      const [resolved, taskRes, noteRes, actRes] = await Promise.all([
-        resolveProject(),
+    setLoading(true);
+    try {
+      const [pRes, mRes, tRes, lRes, memRes] = await Promise.all([
+        getProjects(user.id),
+        getMilestones(id),
         getTaskItems(id),
-        getProjectNotes(id),
-        getProjectActivities(id),
+        getProjectLogs(id),
+        getProjectMembers(id),
       ]);
 
-      if (!resolved) {
-        setError("Project not found.");
-        setLoading(false);
-        return;
-      }
-
-      setProject(resolved);
-      setTasks(taskRes.data);
-      setNotes(noteRes.data);
-      setActivities(actRes.data);
-
-      const lastLog = noteRes.data.find((note) => note.note_type === "daily_log");
-      if (lastLog) setLastLogAt(lastLog.created_at);
-
+      const foundProject = (pRes.data as Project[]).find(p => p.id === id);
+      if (foundProject) setProject(foundProject);
+      setMilestones(mRes.data || []);
+      setTasks(tRes.data || []);
+      setLogs(lRes.data || []);
+      setMembers(memRes.data || []);
+    } catch (err) {
+      console.error("Load failed", err);
+    } finally {
       setLoading(false);
-    };
+    }
+  }, [id, user]);
 
-    load();
-  }, [id, user, projects, setProjects]);
+  useEffect(() => { loadAll(); }, [loadAll]);
+
+  const loadHistory = useCallback(async (page: number) => {
+    if (!id) return;
+    setHistoryLoading(true);
+    try {
+      const res = await getProjectLogsPage(id, page, historyPageSize);
+      // eslint-disable-next-line no-console
+      console.log("RESPONSE - project_logs (history page)", res);
+      if (res.error) {
+        // eslint-disable-next-line no-console
+        console.error("ERROR - project_logs (history page)", res.error);
+        throw res.error;
+      }
+      setHistoryLogs(res.data || []);
+      setHistoryTotal(res.count || 0);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [historyPageSize, id]);
 
   useEffect(() => {
-    if (!id) return;
-    const fromStore = projects.find((entry) => entry.id === id);
-    if (fromStore) setProject(fromStore);
-  }, [projects, id]);
+    if (activeTab === "history") {
+      setHistoryPage(1);
+      loadHistory(1);
+    }
+  }, [activeTab, loadHistory]);
 
-  const handleAddTask = useCallback(async (title: string) => {
+  const handleLogSubmit = async (payload: any) => {
     if (!project || !user) return;
-    const { data } = await createTaskItem({
+    const insertPayload = {
       project_id: project.id,
       user_id: user.id,
-      title,
-      status: "todo",
-      item_type: "task",
-    });
-    if (data) {
-      setTasks((prev) => [...prev, data]);
-      await createProjectActivity({
-        project_id: project.id,
-        user_id: user.id,
-        action: `Added task: "${title}"`,
-      });
-    }
-  }, [project, user]);
+      completed_work: payload.completed,
+      next_steps: payload.next_steps,
+      blockers: payload.blockers,
+      notes: payload.notes,
+    };
 
-  const handleToggleTask = useCallback(async (task: TaskItem) => {
-    const { data } = await updateTaskItem(task.id, { status: task.status });
-    if (data) setTasks((prev) => prev.map((entry) => (entry.id === data.id ? data : entry)));
-  }, []);
+    // Debug logging for diagnostics
+    // eslint-disable-next-line no-console
+    console.log("INSERT PAYLOAD - project_logs", insertPayload);
 
-  const handleDeleteTask = useCallback(async (taskId: string) => {
-    await deleteTaskItem(taskId);
-    setTasks((prev) => prev.filter((entry) => entry.id !== taskId));
-  }, []);
+    const response = await createProjectLog(insertPayload);
 
-  const handleBulkDeleteTasks = useCallback(async (ids: string[]) => {
-    await Promise.all(ids.map((taskId) => deleteTaskItem(taskId)));
-    setTasks((prev) => prev.filter((entry) => !ids.includes(entry.id)));
-  }, []);
+    // eslint-disable-next-line no-console
+    console.log("RESPONSE - project_logs", response);
 
-  const handleAddMilestone = useCallback(async (title: string) => {
-    if (!project || !user) return;
-    const { data } = await createTaskItem({
-      project_id: project.id,
-      user_id: user.id,
-      title,
-      status: "todo",
-      item_type: "milestone",
-    });
-    if (data) setTasks((prev) => [...prev, data]);
-  }, [project, user]);
-
-  const handleToggleMilestone = useCallback(async (milestone: TaskItem) => {
-    const next = milestone.status === "done" ? "todo" : "done";
-    const { data } = await updateTaskItem(milestone.id, { status: next });
-    if (data) setTasks((prev) => prev.map((entry) => (entry.id === data.id ? data : entry)));
-  }, []);
-
-  const handleDeleteMilestone = useCallback(async (milestoneId: string) => {
-    await deleteTaskItem(milestoneId);
-    setTasks((prev) => prev.filter((entry) => entry.id !== milestoneId));
-  }, []);
-
-  const handleBulkDeleteMilestones = useCallback(async (ids: string[]) => {
-    await Promise.all(ids.map((milestoneId) => deleteTaskItem(milestoneId)));
-    setTasks((prev) => prev.filter((entry) => !ids.includes(entry.id)));
-  }, []);
-
-  const handleLogSubmit = useCallback(async (log: DailyLogPayload) => {
-    if (!project || !user) return;
-    setLogBusy(true);
-    const { data } = await createDailyLog({ project_id: project.id, user_id: user.id, log });
-    if (data) {
-      setNotes((prev) => [data, ...prev]);
-      setLastLogAt(data.created_at);
-      await createProjectActivity({
-        project_id: project.id,
-        user_id: user.id,
-        action: "Posted daily work log",
-        details: log.completed || log.next_steps || "",
-      });
-      setActivities((prev) => [
-        {
-          id: crypto.randomUUID(),
-          project_id: project.id,
-          user_id: user.id,
-          action: "Posted daily work log",
-          details: log.completed || log.next_steps || "",
-          created_at: new Date().toISOString(),
-        },
-        ...prev,
-      ]);
-    }
-    setLogBusy(false);
-  }, [project, user]);
-
-  const handleGenerateReport = useCallback(async (type: "today" | "full") => {
-    if (!project) return "";
-
-    if (type === "today") {
-      const todayLogs = notes.filter((note) => {
-        if (note.note_type !== "daily_log") return false;
-        const date = new Date(note.created_at);
-        const now = new Date();
-        return date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-      });
-
-      if (todayLogs.length === 0) {
-        return `Daily Report - ${new Date().toDateString()}\nProject: ${project.name}\n\nNo logs posted today yet.`;
-      }
-
-      const lines = todayLogs.map((note) => {
-        try {
-          const parsed = JSON.parse(note.content);
-          return [
-            `[${new Date(note.created_at).toLocaleTimeString()}]`,
-            parsed.completed ? `Completed: ${parsed.completed}` : "",
-            parsed.next_steps ? `Next Steps: ${parsed.next_steps}` : "",
-            parsed.blockers ? `Blockers: ${parsed.blockers}` : "",
-            parsed.notes ? `Notes: ${parsed.notes}` : "",
-          ].filter(Boolean).join("\n");
-        } catch {
-          return note.content;
-        }
-      });
-
-      return [`Daily Report - ${new Date().toDateString()}`, `Project: ${project.name}`, `Status: ${project.status}`, "", ...lines].join("\n");
+    if ((response as any).error) {
+      // eslint-disable-next-line no-console
+      console.error("ERROR - project_logs", (response as any).error);
+      throw (response as any).error;
     }
 
-    const doneTasks = taskItems.filter((task) => task.status === "done");
-    const pendingTasks = taskItems.filter((task) => task.status !== "done");
-    const doneMilestones = milestones.filter((milestone) => milestone.status === "done");
+    const updatedLogs = await getProjectLogs(project.id);
 
-    return [
-      "Full Project Report",
-      `Generated: ${new Date().toLocaleString()}`,
-      `${"-".repeat(40)}`,
-      "",
-      `PROJECT: ${project.name}`,
-      `Status: ${project.status}`,
-      `Description: ${project.description || "N/A"}`,
-      "",
-      `PROGRESS: ${progress}%`,
-      `Tasks Completed: ${doneTasks.length}/${taskItems.length}`,
-      `Milestones Completed: ${doneMilestones.length}/${milestones.length}`,
-      "",
-      "COMPLETED TASKS:",
-      ...doneTasks.map((task) => `  * ${task.title}`),
-      "",
-      "PENDING TASKS:",
-      ...pendingTasks.map((task) => `  - ${task.title} [${task.status}]`),
-      "",
-      "MILESTONES:",
-      ...milestones.map((milestone) => `  ${milestone.status === "done" ? "*" : "-"} ${milestone.title}`),
-      "",
-      "RECENT ACTIVITY:",
-      ...activities.slice(0, 5).map((activity) => `  • ${activity.action} - ${new Date(activity.created_at).toLocaleString()}`),
-    ].join("\n");
-  }, [project, notes, taskItems, milestones, activities, progress]);
+    // eslint-disable-next-line no-console
+    console.log("RESPONSE - project_logs (refetch)", updatedLogs);
 
-  const handleExport = () => {
-    if (!project) return;
-    const content = `Project: ${project.name}\nStatus: ${project.status}\nProgress: ${progress}%\nExported: ${new Date().toLocaleString()}`;
-    const blob = new Blob([content], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${project.name.replace(/\s+/g, "_")}.txt`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    if (updatedLogs.error) {
+      // eslint-disable-next-line no-console
+      console.error("ERROR - project_logs (refetch)", updatedLogs.error);
+      throw updatedLogs.error;
+    }
+
+    setLogs(updatedLogs.data || []);
+
+    if (activeTab === "history") {
+      await loadHistory(historyPage);
+    }
   };
+
+  const handleAddMilestone = async (title: string) => {
+    if (!project || !user) return;
+    const { data } = await createMilestone({
+      project_id: project.id,
+      user_id: user.id,
+      title,
+      status: 'not_started'
+    });
+    if (data) setMilestones(prev => [...prev, data]);
+  };
+
+  const handleUpdateMilestone = async (m: any) => {
+    const updatePayload: Partial<Milestone> = {
+      title: m.title,
+      status: m.status,
+    };
+
+    // eslint-disable-next-line no-console
+    console.log("UPDATE PAYLOAD - milestones", { id: m.id, payload: updatePayload });
+
+    const response = await updateMilestone(m.id, updatePayload);
+
+    // eslint-disable-next-line no-console
+    console.log("RESPONSE - milestones (update)", response);
+
+    if ((response as any).error) {
+      // eslint-disable-next-line no-console
+      console.error("ERROR - milestones (update)", (response as any).error);
+      throw (response as any).error;
+    }
+
+    const { data } = response as any;
+    if (data) setMilestones(prev => prev.map(item => item.id === data.id ? (data as Milestone) : item));
+  };
+
+  const handleDeleteMilestone = async (mid: string) => {
+    await deleteMilestone(mid);
+    setMilestones(prev => prev.filter(m => m.id !== mid));
+  };
+
+  const handleAddTask = async (title: string, milestoneId: string) => {
+    if (!project || !user) return;
+    const insertPayload = {
+      project_id: project.id,
+      milestone_id: milestoneId,
+      title,
+      status: "not_done",
+      is_completed: false,
+      priority: "medium",
+    };
+
+    // eslint-disable-next-line no-console
+    console.log("INSERT PAYLOAD - task_items", insertPayload);
+
+    const response = await createTaskItem(insertPayload as any);
+
+    // eslint-disable-next-line no-console
+    console.log("RESPONSE - task_items", response);
+
+    if ((response as any).error) {
+      // eslint-disable-next-line no-console
+      console.error("ERROR - task_items", (response as any).error);
+      throw (response as any).error;
+    }
+
+    const updatedTasks = await getTaskItems(project.id);
+
+    // eslint-disable-next-line no-console
+    console.log("RESPONSE - task_items (refetch)", updatedTasks);
+
+    if (updatedTasks.error) {
+      // eslint-disable-next-line no-console
+      console.error("ERROR - task_items (refetch)", updatedTasks.error);
+      throw updatedTasks.error;
+    }
+
+    setTasks(updatedTasks.data || []);
+  };
+
+  const handleUpdateTask = async (tid: string, payload: any) => {
+    const updatePayload = payload;
+
+    // eslint-disable-next-line no-console
+    console.log("UPDATE PAYLOAD - task_items", { id: tid, payload: updatePayload });
+
+    const response = await updateTaskItem(tid, updatePayload);
+
+    // eslint-disable-next-line no-console
+    console.log("RESPONSE - task_items (update)", response);
+
+    if ((response as any).error) {
+      // eslint-disable-next-line no-console
+      console.error("ERROR - task_items (update)", (response as any).error);
+      throw (response as any).error;
+    }
+
+    const updatedTasks = await getTaskItems(project?.id ?? "");
+
+    // eslint-disable-next-line no-console
+    console.log("RESPONSE - task_items (refetch after update)", updatedTasks);
+
+    if (updatedTasks.error) {
+      // eslint-disable-next-line no-console
+      console.error("ERROR - task_items (refetch after update)", updatedTasks.error);
+      throw updatedTasks.error;
+    }
+
+    setTasks(updatedTasks.data || []);
+  };
+
+  const handleDeleteTask = async (tid: string) => {
+    // eslint-disable-next-line no-console
+    console.log("DELETE PAYLOAD - task_items", { id: tid });
+
+    const response = await deleteTaskItem(tid);
+
+    // eslint-disable-next-line no-console
+    console.log("RESPONSE - task_items (delete)", response);
+
+    if ((response as any).error) {
+      // eslint-disable-next-line no-console
+      console.error("ERROR - task_items (delete)", (response as any).error);
+      throw (response as any).error;
+    }
+
+    const updatedTasks = await getTaskItems(project?.id ?? "");
+
+    // eslint-disable-next-line no-console
+    console.log("RESPONSE - task_items (refetch after delete)", updatedTasks);
+
+    if (updatedTasks.error) {
+      // eslint-disable-next-line no-console
+      console.error("ERROR - task_items (refetch after delete)", updatedTasks.error);
+      throw updatedTasks.error;
+    }
+
+    setTasks(updatedTasks.data || []);
+  };
+
+  const completedTasks = tasks.filter(t => t.status === "done").length;
+  const progress = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
 
   const renderTab = () => {
     if (!project || !user) return null;
@@ -364,55 +586,179 @@ const ProjectManagerPage = () => {
         return (
           <OverviewTab
             project={project}
-            tasks={taskItems}
+            tasks={tasks}
             milestones={milestones}
-            notes={notes}
-            activities={activities}
-            userId={user.id}
+            logs={logs}
             onLogSubmit={handleLogSubmit}
-            onMilestoneAdd={handleAddMilestone}
-            onMilestoneToggle={handleToggleMilestone}
-            onMilestoneDelete={handleDeleteMilestone}
-            onMilestoneBulkDelete={handleBulkDeleteMilestones}
-            onGenerateReport={handleGenerateReport}
-            logBusy={logBusy}
-            lastLogAt={lastLogAt}
+            userId={user.id}
+            onAddMilestone={handleAddMilestone}
+            onUpdateMilestone={handleUpdateMilestone}
+            onDeleteMilestone={handleDeleteMilestone}
           />
         );
       case "milestones":
         return (
-          <div className="max-w-2xl">
-            <MilestonesCard
-              milestones={milestones}
-              projectId={project.id}
-              userId={user.id}
-              onAdd={handleAddMilestone}
-              onToggle={handleToggleMilestone}
-              onDelete={handleDeleteMilestone}
-              onBulkDelete={handleBulkDeleteMilestones}
-            />
+          <div className="max-w-4xl mx-auto">
+             <MilestonesCard
+                milestones={milestones.map(m => ({ ...m, item_type: 'milestone' } as any))}
+                projectId={project.id}
+                userId={user.id}
+                onAdd={handleAddMilestone}
+                onToggle={(m: any) => handleUpdateMilestone({ ...m, status: m.status === 'completed' ? 'in_progress' : 'completed' })}
+                onDelete={handleDeleteMilestone}
+                onBulkDelete={async (ids) => { for(const mid of ids) await deleteMilestone(mid); setMilestones(prev => prev.filter(m => !ids.includes(m.id))); }}
+             />
           </div>
         );
       case "tasks":
         return (
-          <TasksPanel
-            tasks={taskItems}
-            projectId={project.id}
-            userId={user.id}
-            onAdd={handleAddTask}
-            onToggle={handleToggleTask}
-            onDelete={handleDeleteTask}
-            onBulkDelete={handleBulkDeleteTasks}
-          />
+          <div className="max-w-5xl mx-auto space-y-8">
+            {milestones.length === 0 ? (
+              <div className="glass-panel p-12 text-center text-slate-500">
+                You must create a milestone before adding tasks.
+              </div>
+            ) : (
+              milestones.map(m => (
+                <div key={m.id} className="space-y-4">
+                  <div className="flex items-center justify-between px-2">
+                    <div className="flex items-center gap-3">
+                      <span className={`w-2 h-2 rounded-full ${m.status === 'completed' ? 'bg-emerald-500' : 'bg-primary'}`} />
+                      <h3 className="font-bold text-slate-200">{m.title}</h3>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-mono tracking-widest uppercase">Tasks: {tasks.filter(t => t.milestone_id === m.id).length}</span>
+                  </div>
+                  <TasksPanel
+                    tasks={tasks.filter(t => t.milestone_id === m.id)}
+                    projectId={project.id}
+                    userId={user.id}
+                    onAdd={(title) => handleAddTask(title, m.id)}
+                    onUpdate={async (taskId, updates) => {
+                      const updatePayload = {
+                        priority: updates.priority,
+                        status: updates.status,
+                        is_completed: updates.status === "done",
+                      };
+                      await handleUpdateTask(taskId, updatePayload);
+                    }}
+                    onDelete={handleDeleteTask}
+                    onBulkDelete={async (ids) => { for(const tid of ids) await deleteTaskItem(tid); setTasks(prev => prev.filter(t => !ids.includes(t.id))); }}
+                  />
+                </div>
+              ))
+            )}
+          </div>
         );
-      case "activity":
-        return <div className="max-w-3xl"><ActivityFeed activities={activities} notes={notes} compact={false} /></div>;
       case "reports":
-        return <div className="max-w-lg"><ReportsCard project={project} onGenerateReport={handleGenerateReport} /></div>;
+        return (
+          <div className="max-w-3xl mx-auto">
+            <ReportsCard 
+              project={project} 
+              onGenerateReport={async (type) => { 
+                let content = "";
+                if (type === 'today') {
+                  const today = new Date().toISOString().split('T')[0];
+                  const tLogs = logs.filter(l => l.created_at.startsWith(today));
+                  content = `DAILY REPORT - ${today}\nProject: ${project.name}\n${"=".repeat(40)}\n\n`;
+                  if (tLogs.length === 0) content += "No logs posted today.";
+                  tLogs.forEach(l => {
+                    content += `[Team]\n`;
+                    content += `COMPLETED: ${l.completed_work}\n`;
+                    content += `NEXT STEPS: ${l.next_steps}\n`;
+                    content += `BLOCKERS: ${l.blockers || 'None'}\n\n`;
+                  });
+                } else {
+                  content = `FULL PROJECT REPORT - ${project.name}\nGenerated: ${new Date().toLocaleString()}\n${"=".repeat(40)}\n\n`;
+                  content += `CURRENT PROGRESS: ${progress}%\n\n`;
+                  content += `MILESTONES SUMMARY:\n`;
+                  milestones.forEach(m => content += `- ${m.title} [${m.status}]\n`);
+                  content += `\nTASK LISTING:\n`;
+                  tasks.forEach(t => content += `[${t.status === "done" ? 'X' : ' '}] ${t.title} (${t.priority}, ${t.status})\n`);
+                  content += `\nWORK LOG HISTORY:\n`;
+                  logs.forEach(l => content += `${l.created_at.split('T')[0]} - User: ${l.completed_work.slice(0, 50)}...\n`);
+                }
+                await createProjectReport({ project_id: project.id, user_id: user.id, type, content });
+                return content;
+              }} 
+            />
+          </div>
+        );
       case "team":
         return (
-          <div className="max-w-md">
-            <TeamCard members={[{ id: user.id, email: user.email ?? "owner@workspace", role: "Owner", avatarColor: "" }]} />
+          <div className="max-w-2xl mx-auto">
+            <TeamCard 
+              members={members.map(m => ({ 
+                id: m.user_id, 
+                display_name: m.user_profiles?.display_name || 'Team Member', 
+                role: m.role, 
+                avatarColor: '' 
+              }))} 
+            />
+          </div>
+        );
+      case "history":
+        return (
+          <div className="max-w-4xl mx-auto space-y-4">
+            <div className="glass-panel p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🕘</span>
+                  <h3 className="font-semibold text-slate-200 text-sm">History</h3>
+                </div>
+                <span className="text-xs text-slate-500">{historyTotal} logs</span>
+              </div>
+
+              {historyLoading ? (
+                <div className="py-10 flex items-center justify-center">
+                  <InlineSpinner />
+                </div>
+              ) : historyLogs.length === 0 ? (
+                <div className="text-center py-8 text-slate-500 text-sm">
+                  No logs yet.
+                </div>
+              ) : (
+                <HistoryList
+                  project={project}
+                  logs={historyLogs}
+                  page={historyPage}
+                  pageSize={historyPageSize}
+                  total={historyTotal}
+                  onPageChange={async (p) => {
+                    setHistoryPage(p);
+                    await loadHistory(p);
+                  }}
+                  onDeleteSelected={async (ids) => {
+                    // eslint-disable-next-line no-console
+                    console.log("DELETE PAYLOAD - project_logs", { ids });
+                    const { supabase } = await import("../api/supabaseClient");
+                    const resp = await supabase.from("project_logs").delete().in("id", ids);
+                    // eslint-disable-next-line no-console
+                    console.log("RESPONSE - project_logs (delete selected)", resp);
+                    if (resp.error) {
+                      // eslint-disable-next-line no-console
+                      console.error("ERROR - project_logs (delete selected)", resp.error);
+                      throw resp.error;
+                    }
+                    await loadHistory(historyPage);
+                    const updatedLogs = await getProjectLogs(project.id);
+                    if (updatedLogs.error) throw updatedLogs.error;
+                    setLogs(updatedLogs.data || []);
+                  }}
+                  onExportSelected={(ids) => {
+                    const selected = historyLogs.filter(l => ids.includes(l.id));
+                    let content = `Project: ${project.name}\n\n`;
+                    selected.forEach((l, idx) => {
+                      content += `--- Entry ${idx + 1} ---\n`;
+                      content += `Date: ${l.created_at}\n`;
+                      content += `Completed: ${l.completed_work ?? ""}\n`;
+                      content += `Next Steps: ${l.next_steps ?? ""}\n`;
+                      content += `Blockers: ${l.blockers ?? ""}\n`;
+                      content += `Notes: ${l.notes ?? ""}\n\n`;
+                    });
+                    downloadTxt(`${project.name.replace(/\s+/g, "_")}_selected_logs.txt`, content);
+                  }}
+                />
+              )}
+            </div>
           </div>
         );
       default:
@@ -420,45 +766,104 @@ const ProjectManagerPage = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="flex flex-col items-center gap-3 text-slate-400">
-          <InlineSpinner />
-          <p className="text-sm">Loading project...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !project) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px]">
-        <div className="glass-panel p-8 max-w-md text-center space-y-3">
-          <p className="text-4xl">Search</p>
-          <p className="text-lg font-semibold text-slate-200">Project not found</p>
-          <p className="text-sm text-slate-400">{error ?? "This project doesn't exist or you don't have access."}</p>
-          <button className="btn-primary" onClick={() => navigate("/projects")}>Back to Projects</button>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div className="flex h-96 items-center justify-center"><InlineSpinner /></div>;
+  if (!project) return <div className="p-12 text-center text-slate-500">Project not found.</div>;
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto">
-      <ProjectHeader
-        project={project}
-        progress={progress}
-        onExport={handleExport}
-        onGenerateReport={() => setActiveTab("reports")}
-        onAddUpdate={() => setActiveTab("overview")}
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <ProjectHeader 
+        project={project} 
+        progress={progress} 
+        onExport={async () => {
+          try {
+            const [mRes, tRes, lRes] = await Promise.all([
+              getMilestones(project.id),
+              getTaskItems(project.id),
+              getAllProjectLogs(project.id),
+            ]);
+            if (mRes.error) throw mRes.error;
+            if (tRes.error) throw tRes.error;
+            if (lRes.error) throw lRes.error;
+
+            let content = `PROJECT EXPORT\nProject: ${project.name}\nGenerated: ${new Date().toLocaleString()}\n${"=".repeat(50)}\n\n`;
+            content += `MILESTONES:\n`;
+            (mRes.data || []).forEach((m) => {
+              content += `- ${m.title} [${m.status}]\n`;
+            });
+
+            content += `\nTASKS:\n`;
+            (tRes.data || []).forEach((t) => {
+              content += `- ${t.title} | priority=${t.priority} | status=${t.status}\n`;
+            });
+
+            content += `\nLOGS:\n`;
+            (lRes.data || []).forEach((l) => {
+              content += `\n[${l.created_at}]\n`;
+              content += `Completed: ${l.completed_work ?? ""}\n`;
+              content += `Next Steps: ${l.next_steps ?? ""}\n`;
+              content += `Blockers: ${l.blockers ?? ""}\n`;
+              content += `Notes: ${l.notes ?? ""}\n`;
+            });
+
+            downloadTxt(`${project.name.replace(/\s+/g, "_")}_full_export.txt`, content);
+          } catch (error) {
+            // eslint-disable-next-line no-console
+            console.error("ERROR - export full project", error);
+            window.alert("Export failed. Check console for details.");
+          }
+        }} 
+        onGenerateReport={() => {
+          try {
+            const latest = logs[0];
+            if (!latest) {
+              window.alert("No logs yet for today’s report.");
+              return;
+            }
+            const content =
+              `Project: ${project.name}\n\n` +
+              `Completed Work:\n${latest.completed_work ?? ""}\n\n` +
+              `Next Steps:\n${latest.next_steps ?? ""}\n\n` +
+              `Blockers:\n${latest.blockers ?? ""}\n\n` +
+              `Notes:\n${latest.notes ?? ""}\n`;
+            downloadTxt(`${project.name.replace(/\s+/g, "_")}_today_report.txt`, content);
+          } catch (error) {
+            // eslint-disable-next-line no-console
+            console.error("ERROR - generate today report", error);
+            window.alert("Report generation failed. Check console for details.");
+          }
+        }} 
+        onAddUpdate={() => setShowUpdateModal(true)} 
       />
-
       <div className="glass-panel overflow-hidden">
-        <ProjectTabs activeTab={activeTab} onChange={setActiveTab} taskCount={taskItems.length} />
+        <ProjectTabs activeTab={activeTab} onChange={setActiveTab} />
       </div>
+      <div className="pb-12">{renderTab()}</div>
 
-      <div className="pb-8">{renderTab()}</div>
+      {showUpdateModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-3xl space-y-3">
+            <div className="flex items-center justify-between px-1">
+              <div className="text-sm font-semibold text-slate-200">Add Update</div>
+              <button
+                className="text-slate-400 hover:text-slate-200 transition"
+                onClick={() => setShowUpdateModal(false)}
+              >
+                ×
+              </button>
+            </div>
+            <WorkLogCard
+              onSubmit={async (p) => {
+                await handleLogSubmit(p);
+                setShowUpdateModal(false);
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

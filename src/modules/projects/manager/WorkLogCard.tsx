@@ -1,13 +1,12 @@
 import { useState } from "react";
-import type { DailyLogPayload } from "../../../api/projectManagerApi";
 
 interface Props {
-  onSubmit: (log: DailyLogPayload) => Promise<void>;
+  onSubmit: (log: { completed: string; next_steps: string; blockers: string; notes: string }) => Promise<void>;
   busy?: boolean;
-  lastSubmitted?: string | null; // ISO timestamp of last log
+  lastSubmitted?: string | null;
 }
 
-const empty: DailyLogPayload = {
+const empty = {
   completed: "",
   next_steps: "",
   blockers: "",
@@ -15,7 +14,7 @@ const empty: DailyLogPayload = {
 };
 
 const WorkLogCard = ({ onSubmit, busy, lastSubmitted }: Props) => {
-  const [log, setLog] = useState<DailyLogPayload>(empty);
+  const [log, setLog] = useState(empty);
   const [submitted, setSubmitted] = useState(false);
 
   const today = new Date().toLocaleDateString("en-US", {
@@ -24,7 +23,7 @@ const WorkLogCard = ({ onSubmit, busy, lastSubmitted }: Props) => {
     year: "numeric",
   });
 
-  const set = (key: keyof DailyLogPayload) => (
+  const set = (key: keyof typeof empty) => (
     e: React.ChangeEvent<HTMLTextAreaElement>
   ) => {
     setLog((prev) => ({ ...prev, [key]: e.target.value }));
@@ -32,11 +31,18 @@ const WorkLogCard = ({ onSubmit, busy, lastSubmitted }: Props) => {
   };
 
   const handleSubmit = async () => {
-    if (!log.completed.trim() && !log.next_steps.trim()) return;
-    await onSubmit(log);
-    setLog(empty);
-    setSubmitted(true);
-    setTimeout(() => setSubmitted(false), 3000);
+    // Require at least some completed work per spec
+    if (!log.completed.trim()) return;
+    try {
+      await onSubmit(log);
+      setLog(empty);
+      setSubmitted(true);
+      setTimeout(() => setSubmitted(false), 3000);
+    } catch (error) {
+      // Let parent / console handle error surface; avoid fake success
+      // eslint-disable-next-line no-console
+      console.error("ERROR posting daily log", error);
+    }
   };
 
   const hasBlockers = log.blockers.trim().length > 0;
@@ -132,7 +138,7 @@ const WorkLogCard = ({ onSubmit, busy, lastSubmitted }: Props) => {
       {/* Footer */}
       <div className="flex items-center justify-between pt-1">
         <div className="text-xs text-slate-600">
-          Logs are saved per project and visible in the Activity feed.
+          Logs are saved per project and visible in the Overview history.
         </div>
         <div className="flex items-center gap-3">
           {submitted && (
@@ -141,7 +147,7 @@ const WorkLogCard = ({ onSubmit, busy, lastSubmitted }: Props) => {
             </span>
           )}
           <button
-            className="btn-primary text-sm"
+            className="btn-primary text-sm px-6 py-2"
             onClick={handleSubmit}
             disabled={busy || (!log.completed.trim() && !log.next_steps.trim())}
           >

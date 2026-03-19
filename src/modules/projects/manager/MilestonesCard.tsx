@@ -1,5 +1,5 @@
-﻿import { useState } from "react";
-import type { TaskItem } from "../../../api/projectManagerApi";
+import { useState } from "react";
+import type { Milestone } from "../../../api/projectManagerApi";
 import BulkDeleteBar from "../../../components/BulkDeleteBar";
 import IndeterminateCheckbox from "../../../components/IndeterminateCheckbox";
 import PaginationControls from "../../../components/PaginationControls";
@@ -7,11 +7,11 @@ import { useBulkSelection } from "../../../hooks/useBulkSelection";
 import { usePagination } from "../../../hooks/usePagination";
 
 interface Props {
-  milestones: TaskItem[];
+  milestones: Milestone[];
   projectId: string;
   userId: string;
   onAdd: (title: string) => Promise<void>;
-  onToggle: (milestone: TaskItem) => Promise<void>;
+  onToggle: (milestone: Milestone) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onBulkDelete: (ids: string[]) => Promise<void>;
   busy?: boolean;
@@ -22,9 +22,10 @@ const MilestonesCard = ({ milestones, onAdd, onToggle, onDelete, onBulkDelete, b
   const [input, setInput] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
-  const completedCount = milestones.filter((m) => m.status === "done").length;
+  
+  const completedCount = milestones.filter((m) => m.status === "completed").length;
   const pagination = usePagination(milestones);
-  const selection = useBulkSelection(milestones, (milestone) => milestone.id);
+  const selection = useBulkSelection(milestones, (m) => m.id);
   const pageState = selection.getPageState(pagination.paginatedItems);
 
   const handleAdd = async () => {
@@ -34,7 +35,7 @@ const MilestonesCard = ({ milestones, onAdd, onToggle, onDelete, onBulkDelete, b
     setAdding(false);
   };
 
-  const handleToggle = async (m: TaskItem) => {
+  const handleToggle = async (m: Milestone) => {
     setSavingId(m.id);
     await onToggle(m);
     setSavingId(null);
@@ -53,23 +54,23 @@ const MilestonesCard = ({ milestones, onAdd, onToggle, onDelete, onBulkDelete, b
     <div className="glass-panel p-5 space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-base">Flag</span>
-          <h3 className="font-semibold text-slate-200 text-sm">Milestones</h3>
+          <span className="text-base text-primary">🚩</span>
+          <h3 className="font-semibold text-slate-200 text-sm">Strategic Milestones</h3>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-500">{completedCount}/{milestones.length}</span>
-          <button className="text-xs text-primary hover:text-primary/80 transition font-medium" onClick={() => setAdding((v) => !v)}>
-            {adding ? "Cancel" : "+ Add"}
+          <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">{completedCount}/{milestones.length} Done</span>
+          <button className="text-xs text-primary hover:text-primary/80 transition font-bold" onClick={() => setAdding((v) => !v)}>
+            {adding ? "CANCEL" : "+ ADD"}
           </button>
         </div>
       </div>
 
-      {adding ? (
-        <div className="flex gap-2">
+      {adding && (
+        <div className="flex gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
           <input
             autoFocus
-            className="flex-1 rounded-lg border border-slate-700 bg-surface px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary transition placeholder:text-slate-600"
-            placeholder="Milestone title..."
+            className="flex-1 rounded-lg border border-slate-700 bg-surface px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary transition placeholder:text-slate-600"
+            placeholder="Enter milestone name..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -77,11 +78,11 @@ const MilestonesCard = ({ milestones, onAdd, onToggle, onDelete, onBulkDelete, b
               if (e.key === "Escape") setAdding(false);
             }}
           />
-          <button className="btn-primary text-xs px-3" onClick={handleAdd} disabled={busy || !input.trim()}>
-            Add
+          <button className="btn-primary text-xs px-4" onClick={handleAdd} disabled={busy || !input.trim()}>
+            ADD
           </button>
         </div>
-      ) : null}
+      )}
 
       <BulkDeleteBar
         count={selection.selectedCount}
@@ -92,55 +93,78 @@ const MilestonesCard = ({ milestones, onAdd, onToggle, onDelete, onBulkDelete, b
       />
 
       {milestones.length === 0 ? (
-        <p className="text-xs text-slate-500 italic text-center py-4">No milestones yet. Add your first one above.</p>
+        <div className="text-center py-6 border border-dashed border-slate-800 rounded-xl">
+          <p className="text-xs text-slate-600">No milestones defined for this project.</p>
+        </div>
       ) : (
-        <>
-          <div className="flex items-center gap-3 text-xs uppercase tracking-[0.18em] text-slate-500">
+        <div className="space-y-3">
+          <div className="flex items-center gap-3 text-[10px] uppercase font-bold tracking-widest text-slate-600 px-1">
             <IndeterminateCheckbox
               checked={pageState.checked}
               indeterminate={pageState.indeterminate}
               onChange={() => selection.togglePage(pagination.paginatedItems)}
               ariaLabel="Select all visible milestones"
             />
-            <span>Visible milestones</span>
+            <span>Select All Visible</span>
           </div>
-          <ul className="space-y-2">
+          <ul className="space-y-1">
             {pagination.paginatedItems.map((m) => {
-              const done = m.status === "done";
+              const isCompleted = m.status === "completed";
               const isLoading = savingId === m.id;
               return (
-                <li key={m.id} className="flex items-center gap-3 group rounded-lg px-1 py-1 hover:bg-slate-800/40 transition">
+                <li key={m.id} className="flex items-center gap-3 group rounded-lg px-2 py-2 hover:bg-slate-800/30 transition border border-transparent hover:border-slate-800/50">
                   <input
                     type="checkbox"
                     checked={selection.isSelected(m.id)}
                     onChange={() => selection.toggleOne(m.id)}
-                    className="h-4 w-4 accent-primary"
-                    aria-label={`Select ${m.title}`}
+                    className="h-3.5 w-3.5 accent-primary rounded bg-slate-900 border-slate-700"
                   />
+                  <span className={`flex-1 text-sm leading-snug font-medium ${isCompleted ? "line-through text-slate-600" : "text-slate-300"}`}>
+                    {m.title}
+                  </span>
+                  <button 
+                    className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-rose-500 transition-all p-1" 
+                    onClick={() => onDelete(m.id)} 
+                    title="Delete Milestone"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
                   <button
-                    className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition ${done ? "bg-emerald-500 border-emerald-500" : "border-slate-600 hover:border-primary"} ${isLoading ? "opacity-50" : ""}`}
+                    className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center transition border ${isCompleted ? "bg-emerald-500/10 border-emerald-500 text-emerald-500" : "bg-slate-900 border-slate-700 text-slate-600 hover:border-primary"} ${isLoading ? "opacity-50" : ""}`}
                     onClick={() => handleToggle(m)}
                     disabled={isLoading}
-                    title={done ? "Mark incomplete" : "Mark complete"}
+                    title={isCompleted ? "Mark not done" : "Mark done"}
                   >
-                    {done ? <span className="text-[10px] text-slate-900">?</span> : null}
+                    {isCompleted ? (
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <div className="w-1.5 h-1.5 rounded-full bg-slate-700 group-white" />
+                    )}
                   </button>
-                  <span className={`flex-1 text-sm leading-snug ${done ? "line-through text-slate-500" : "text-slate-200"}`}>{m.title}</span>
-                  {m.due_date ? (
-                    <span className="text-[10px] text-slate-600 hidden group-hover:inline">
-                      {new Date(m.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </span>
-                  ) : null}
-                  <button className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-rose-400 transition text-xs" onClick={() => onDelete(m.id)} title="Delete">×</button>
                 </li>
               );
             })}
           </ul>
-        </>
+        </div>
       )}
 
-      {milestones.length > 0 ? (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/20">
+      {milestones.length > 0 && (
+        <div className="pt-4 border-t border-slate-800/50 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Velocity</span>
+            <span className="text-xs font-bold text-primary tabular-nums">{Math.round((completedCount / milestones.length) * 100)}%</span>
+          </div>
+          <div className="bg-slate-900 rounded-full h-1.5 overflow-hidden border border-slate-800">
+            <div 
+              className="h-full bg-gradient-to-r from-primary to-emerald-400 rounded-full transition-all duration-700" 
+              style={{ width: `${(completedCount / milestones.length) * 100}%` }} 
+            />
+          </div>
+          
           <PaginationControls
             currentPage={pagination.currentPage}
             pageSize={pagination.pageSize}
@@ -153,18 +177,7 @@ const MilestonesCard = ({ milestones, onAdd, onToggle, onDelete, onBulkDelete, b
             itemLabel="milestones"
           />
         </div>
-      ) : null}
-
-      {milestones.length > 0 ? (
-        <div className="pt-2 border-t border-slate-800">
-          <div className="flex items-center gap-2">
-            <div className="flex-1 bg-slate-800 rounded-full h-1.5 overflow-hidden">
-              <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${milestones.length > 0 ? (completedCount / milestones.length) * 100 : 0}%` }} />
-            </div>
-            <span className="text-xs text-slate-500 tabular-nums">{milestones.length > 0 ? Math.round((completedCount / milestones.length) * 100) : 0}%</span>
-          </div>
-        </div>
-      ) : null}
+      )}
     </div>
   );
 };

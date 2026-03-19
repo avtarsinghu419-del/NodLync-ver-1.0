@@ -2,141 +2,172 @@ import { supabase } from "./supabaseClient";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface TaskItem {
+export interface Milestone {
   id: string;
   project_id: string;
   user_id: string;
   title: string;
-  status: "todo" | "in_progress" | "done";
-  item_type: "task" | "milestone";
-  due_date?: string | null;
+  status: "not_started" | "in_progress" | "completed";
   created_at: string;
-  updated_at?: string | null;
 }
 
-export interface DailyLogPayload {
-  completed: string;
-  next_steps: string;
-  blockers: string;
-  notes: string;
+export interface TaskItem {
+  id: string;
+  project_id: string;
+  milestone_id: string;
+  title: string;
+  status: "not_done" | "in_progress" | "done";
+  is_completed: boolean;
+  priority: "low" | "medium" | "high";
+  created_at: string;
 }
 
-export interface ProjectNote {
+export interface ProjectLog {
   id: string;
   project_id: string;
   user_id: string;
-  note_type: string;
+  completed_work: string;
+  next_steps: string;
+  blockers: string;
+  notes?: string;
+  created_at: string;
+}
+
+export interface ProjectMember {
+  id: string;
+  project_id: string;
+  user_id: string;
+  role: "Owner" | "Contributor" | "Viewer";
+  created_at: string;
+  user_profiles?: {
+    display_name: string;
+  };
+}
+
+export interface ProjectReport {
+  id: string;
+  project_id: string;
+  user_id: string;
+  type: "today" | "full";
   content: string;
   created_at: string;
 }
 
-export interface ProjectActivity {
-  id: string;
-  project_id: string;
-  user_id: string;
-  action: string;
-  details?: string | null;
-  created_at: string;
+// ─── Milestones ──────────────────────────────────────────────────────────────
+
+export async function getMilestones(projectId: string) {
+  const result = await supabase
+    .from("milestones")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: true });
+  return { data: (result.data ?? []) as Milestone[], error: result.error };
+}
+
+export async function createMilestone(payload: Omit<Milestone, "id" | "created_at">) {
+  return await supabase.from("milestones").insert(payload).select().single();
+}
+
+export async function updateMilestone(id: string, payload: Partial<Milestone>) {
+  return await supabase.from("milestones").update(payload).eq("id", id).select().single();
+}
+
+export async function deleteMilestone(id: string) {
+  return await supabase.from("milestones").delete().eq("id", id);
 }
 
 // ─── Task Items ───────────────────────────────────────────────────────────────
 
 export async function getTaskItems(projectId: string) {
-  try {
-    const result = await supabase
-      .from("task_items")
-      .select("*")
-      .eq("project_id", projectId)
-      .order("created_at", { ascending: true });
-    if (result.error) return { data: [] as TaskItem[], error: result.error };
-    return { data: (result.data ?? []) as TaskItem[], error: null };
-  } catch {
-    return { data: [] as TaskItem[], error: null };
-  }
-}
-
-export async function createTaskItem(payload: Omit<TaskItem, "id" | "created_at" | "updated_at">) {
   const result = await supabase
     .from("task_items")
-    .insert(payload)
-    .select()
-    .single();
-  return result as { data: TaskItem | null; error: { message: string } | null };
+    .select("*")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: true });
+  return { data: (result.data ?? []) as TaskItem[], error: result.error };
+}
+
+export async function createTaskItem(payload: Omit<TaskItem, "id" | "created_at">) {
+  return await supabase.from("task_items").insert(payload).select().single();
 }
 
 export async function updateTaskItem(id: string, payload: Partial<TaskItem>) {
-  const result = await supabase
-    .from("task_items")
-    .update(payload)
-    .eq("id", id)
-    .select()
-    .single();
-  return result as { data: TaskItem | null; error: { message: string } | null };
+  return await supabase.from("task_items").update(payload).eq("id", id).select().single();
 }
 
 export async function deleteTaskItem(id: string) {
-  return supabase.from("task_items").delete().eq("id", id);
+  return await supabase.from("task_items").delete().eq("id", id);
 }
 
-// ─── Project Notes / Daily Logs ───────────────────────────────────────────────
+// ─── Project Logs ─────────────────────────────────────────────────────────────
 
-export async function getProjectNotes(projectId: string) {
-  try {
-    const result = await supabase
-      .from("project_notes")
-      .select("*")
-      .eq("project_id", projectId)
-      .order("created_at", { ascending: false });
-    if (result.error) return { data: [] as ProjectNote[], error: result.error };
-    return { data: (result.data ?? []) as ProjectNote[], error: null };
-  } catch {
-    return { data: [] as ProjectNote[], error: null };
-  }
+export async function getProjectLogs(projectId: string) {
+  const result = await supabase
+    .from("project_logs")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false })
+    .limit(5);
+  return { data: (result.data ?? []) as ProjectLog[], error: result.error };
 }
 
-export async function createDailyLog(payload: {
-  project_id: string;
-  user_id: string;
-  log: DailyLogPayload;
-}) {
-  try {
-    const result = await supabase
-      .from("project_notes")
-      .insert({
-        project_id: payload.project_id,
-        user_id: payload.user_id,
-        note_type: "daily_log",
-        content: JSON.stringify(payload.log),
-      })
-      .select()
-      .single();
-    return result as { data: ProjectNote | null; error: { message: string } | null };
-  } catch {
-    return { data: null, error: { message: "Failed to save log." } };
-  }
+export async function getAllProjectLogs(projectId: string) {
+  const result = await supabase
+    .from("project_logs")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false });
+  return { data: (result.data ?? []) as ProjectLog[], error: result.error };
 }
 
-// ─── Project Activities ───────────────────────────────────────────────────────
-
-export async function getProjectActivities(projectId: string) {
-  try {
-    const result = await supabase
-      .from("project_activities")
-      .select("*")
-      .eq("project_id", projectId)
-      .order("created_at", { ascending: false })
-      .limit(20);
-    if (result.error) return { data: [] as ProjectActivity[], error: result.error };
-    return { data: (result.data ?? []) as ProjectActivity[], error: null };
-  } catch {
-    return { data: [] as ProjectActivity[], error: null };
-  }
+export async function getProjectLogsPage(projectId: string, page: number, pageSize: number) {
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+  const result = await supabase
+    .from("project_logs")
+    .select("*", { count: "exact" })
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false })
+    .range(from, to);
+  return {
+    data: (result.data ?? []) as ProjectLog[],
+    count: result.count ?? 0,
+    error: result.error,
+  };
 }
 
-export async function createProjectActivity(payload: Omit<ProjectActivity, "id" | "created_at">) {
-  try {
-    await supabase.from("project_activities").insert(payload);
-  } catch {
-    // silently fail — activity logging should never break the main flow
-  }
+export async function createProjectLog(payload: Omit<ProjectLog, "id" | "created_at" | "user_profiles">) {
+  return await supabase.from("project_logs").insert(payload).select().single();
+}
+
+// ─── Project Members ──────────────────────────────────────────────────────────
+
+export async function getProjectMembers(projectId: string) {
+  const result = await supabase
+    .from("project_members")
+    .select(`
+      *,
+      user_profiles ( display_name )
+    `)
+    .eq("project_id", projectId);
+  return { data: (result.data ?? []) as ProjectMember[], error: result.error };
+}
+
+export async function addProjectMember(payload: Omit<ProjectMember, "id" | "created_at" | "user_profiles">) {
+  return await supabase.from("project_members").insert(payload).select().single();
+}
+
+// ─── Project Reports ──────────────────────────────────────────────────────────
+
+export async function getProjectReports(projectId: string) {
+  const result = await supabase
+    .from("project_reports")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false });
+  return { data: (result.data ?? []) as ProjectReport[], error: result.error };
+}
+
+export async function createProjectReport(payload: Omit<ProjectReport, "id" | "created_at">) {
+  return await supabase.from("project_reports").insert(payload).select().single();
 }

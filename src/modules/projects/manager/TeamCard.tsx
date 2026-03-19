@@ -3,7 +3,7 @@ import { usePagination } from "../../../hooks/usePagination";
 
 interface TeamMember {
   id: string;
-  email: string;
+  display_name: string;
   role: "Owner" | "Contributor" | "Viewer";
   avatarColor: string;
 }
@@ -62,11 +62,14 @@ const TeamCard = ({ members }: Props) => {
 
       <ul className="space-y-2">
         {pagination.paginatedItems.map((member) => {
-          const initials = member.email
-            .split("@")[0]
+          const name = member.display_name || 'Member';
+          const initials = name
+            .split(" ")
+            .map(n => n[0])
+            .join("")
             .slice(0, 2)
             .toUpperCase();
-          const colorClass = colorFromString(member.email);
+          const colorClass = colorFromString(name);
 
           return (
             <li
@@ -83,10 +86,10 @@ const TeamCard = ({ members }: Props) => {
               {/* Info */}
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-slate-200 truncate font-medium">
-                  {member.email.split("@")[0]}
+                  {name}
                 </p>
-                <p className="text-xs text-slate-500 truncate">
-                  {member.email}
+                <p className="text-[10px] text-slate-500 uppercase tracking-tighter">
+                  {member.role === 'Owner' ? 'Workspace Lead' : 'Collaborator'}
                 </p>
               </div>
 

@@ -2,9 +2,9 @@ export type TabId =
   | "overview"
   | "milestones"
   | "tasks"
-  | "activity"
   | "reports"
-  | "team";
+  | "team"
+  | "history";
 
 interface Tab {
   id: TabId;
@@ -16,9 +16,9 @@ const TABS: Tab[] = [
   { id: "overview", label: "Overview", icon: "⊞" },
   { id: "milestones", label: "Milestones", icon: "🏁" },
   { id: "tasks", label: "Tasks", icon: "✅" },
-  { id: "activity", label: "Activity", icon: "⚡" },
   { id: "reports", label: "Reports", icon: "📄" },
   { id: "team", label: "Team", icon: "👥" },
+  { id: "history", label: "History", icon: "🕘" },
 ];
 
 interface Props {
