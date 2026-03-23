@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient";
+import { handleApiResponse, type ApiResponse } from "./apiHelper";
 
 export type WorkflowRowType = "folder" | "workflow";
 
@@ -12,88 +13,70 @@ export type WorkflowsRow = {
 };
 
 const TABLE = "workflows";
+const SELECT = "id, name, type, parent_id, json_data, created_at";
 
-export async function listFolders() {
-  return supabase
+export async function listFolders(): Promise<ApiResponse<WorkflowsRow[]>> {
+  const promise = supabase
     .from(TABLE)
-    .select("*")
+    .select(SELECT)
     .eq("type", "folder")
-    .order("created_at", { ascending: true }) as Promise<{
-    data: WorkflowsRow[] | null;
-    error: { message: string } | null;
-  }>;
+    .order("created_at", { ascending: true });
+  return handleApiResponse<WorkflowsRow[]>(promise as any);
 }
 
-export async function listWorkflows(folderId: string) {
-  return supabase
+export async function listWorkflows(folderId: string): Promise<ApiResponse<WorkflowsRow[]>> {
+  const promise = supabase
     .from(TABLE)
-    .select("*")
+    .select(SELECT)
     .eq("type", "workflow")
     .eq("parent_id", folderId)
-    .order("created_at", { ascending: false }) as Promise<{
-    data: WorkflowsRow[] | null;
-    error: { message: string } | null;
-  }>;
+    .order("created_at", { ascending: false });
+  return handleApiResponse<WorkflowsRow[]>(promise as any);
 }
 
-export async function folderNameExists(name: string) {
+export async function folderNameExists(name: string): Promise<boolean> {
   const trimmed = name.trim();
   if (!trimmed) return false;
-  // Keep it simple/portable: fetch folder names and compare case-insensitively.
-  const { data, error } = (await supabase
-    .from(TABLE)
-    .select("name")
-    .eq("type", "folder")) as any;
-  if (error) return false;
-  if (!Array.isArray(data)) return false;
-  return data.some((r) => typeof r?.name === "string" && r.name.toLowerCase() === trimmed.toLowerCase());
+  const { data } = await listFolders();
+  if (!data) return false;
+  return data.some((r) => r.name.toLowerCase() === trimmed.toLowerCase());
 }
 
-export async function createFolder(name: string) {
+export async function createFolder(name: string): Promise<ApiResponse<WorkflowsRow>> {
   const payload = {
     name: name.trim(),
     type: "folder" as const,
     parent_id: null,
     json_data: null,
   };
-  return supabase.from(TABLE).insert(payload).select("*").single() as Promise<{
-    data: WorkflowsRow | null;
-    error: { message: string } | null;
-  }>;
+  const promise = supabase.from(TABLE).insert(payload).select(SELECT).single();
+  return handleApiResponse<WorkflowsRow>(promise as any);
 }
 
 export async function createWorkflow(payload: {
   name: string;
   parent_id: string;
   json_data: any;
-}) {
+}): Promise<ApiResponse<WorkflowsRow>> {
   const row = {
     name: payload.name.trim(),
     type: "workflow" as const,
     parent_id: payload.parent_id,
     json_data: payload.json_data,
   };
-  return supabase.from(TABLE).insert(row).select("*").single() as Promise<{
-    data: WorkflowsRow | null;
-    error: { message: string } | null;
-  }>;
+  const promise = supabase.from(TABLE).insert(row).select(SELECT).single();
+  return handleApiResponse<WorkflowsRow>(promise as any);
 }
 
-export async function deleteWorkflow(id: string) {
-  return supabase.from(TABLE).delete().eq("id", id) as Promise<{
-    data: any;
-    error: { message: string } | null;
-  }>;
+export async function deleteWorkflow(id: string): Promise<ApiResponse<null>> {
+  const promise = supabase.from(TABLE).delete().eq("id", id);
+  return handleApiResponse<null>(promise as any);
 }
 
-export async function deleteFolderCascade(folderId: string) {
-  // Delete folder + all workflows under it
-  return supabase
+export async function deleteFolderCascade(folderId: string): Promise<ApiResponse<null>> {
+  const promise = supabase
     .from(TABLE)
     .delete()
-    .or(`id.eq.${folderId},parent_id.eq.${folderId}`) as Promise<{
-    data: any;
-    error: { message: string } | null;
-  }>;
+    .or(`id.eq.${folderId},parent_id.eq.${folderId}`);
+  return handleApiResponse<null>(promise as any);
 }
-

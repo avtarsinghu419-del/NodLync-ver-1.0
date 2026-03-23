@@ -1,18 +1,15 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import useAppStore from "../store/useAppStore";
-import {
-  getMeetings,
-  createMeeting,
-  updateMeeting,
-  deleteMeeting,
-  type MeetingLink,
-} from "../api/meetingsApi";
+import { useMeetings } from "../hooks/useMeetings";
+import type { MeetingLink } from "../api/meetingsApi";
 import BulkDeleteBar from "../components/BulkDeleteBar";
 import IndeterminateCheckbox from "../components/IndeterminateCheckbox";
 import InlineSpinner from "../components/InlineSpinner";
 import PaginationControls from "../components/PaginationControls";
 import { useBulkSelection } from "../hooks/useBulkSelection";
 import { usePagination } from "../hooks/usePagination";
+import { useLocation } from "react-router-dom";
+import ModuleHeader from "../components/ModuleHeader";
 
 const platformColor = (p: string) => {
   switch (p.toLowerCase()) {
@@ -40,9 +37,15 @@ const playBeep = () => {
 };
 
 const MeetingsPage = () => {
+  const { 
+    meetings, 
+    loading: meetingsLoading, 
+    addMeeting, 
+    updateMeeting: updateMeetingHook, 
+    removeMeeting 
+  } = useMeetings();
+
   const user = useAppStore((s) => s.user);
-  const [meetings, setMeetings] = useState<MeetingLink[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedMeeting, setSelectedMeeting] = useState<MeetingLink | null>(null);
   const [form, setForm] = useState({ title: "", platform: "Zoom", meeting_url: "", date: "", time: "", description: "" });
   const [saving, setSaving] = useState(false);
@@ -50,18 +53,24 @@ const MeetingsPage = () => {
   const [toasts, setToasts] = useState<{ id: number; message: string; type: string }[]>([]);
   const [notifiedSet, setNotifiedSet] = useState<Set<string>>(new Set());
 
+  const location = useLocation();
+
   useEffect(() => {
     if (!selectedMeeting) {
       const now = new Date();
       now.setMinutes(now.getMinutes() + 15);
+      const incomingDate = location.state?.createForDate;
       setForm({
         title: "",
         platform: "Zoom",
         meeting_url: "",
-        date: now.toISOString().split("T")[0],
+        date: incomingDate || now.toISOString().split("T")[0],
         time: now.toTimeString().substring(0, 5),
         description: "",
       });
+      if (incomingDate) {
+        window.history.replaceState({}, document.title);
+      }
     } else {
       const d = new Date(selectedMeeting.scheduled_at);
       setForm({
@@ -73,7 +82,7 @@ const MeetingsPage = () => {
         description: selectedMeeting.description || "",
       });
     }
-  }, [selectedMeeting]);
+  }, [selectedMeeting, location.state]);
 
   const addToast = useCallback((msg: string, type: "info" | "urgent") => {
     const id = Date.now() + Math.random();
@@ -93,20 +102,11 @@ const MeetingsPage = () => {
     }
   }, []);
 
-  const fetchMeetings = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
-    const { data } = await getMeetings(user.id);
-    setMeetings(data);
-    setLoading(false);
-  }, [user]);
-
   useEffect(() => {
-    fetchMeetings();
     if ("Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
     }
-  }, [fetchMeetings]);
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -134,7 +134,6 @@ const MeetingsPage = () => {
           }
         }
       });
-      setMeetings((prev) => [...prev]);
     }, 30000);
     return () => clearInterval(interval);
   }, [meetings, notifiedSet, addToast, notifyBrowser]);
@@ -154,32 +153,44 @@ const MeetingsPage = () => {
       meeting_url: form.meeting_url,
       description: form.description,
       scheduled_at: scheduledAt.toISOString(),
+      user_id: user.id
     };
 
-    if (selectedMeeting) {
-      const { data, error } = await updateMeeting(selectedMeeting.id, payload);
-      if (error) alert(`Failed to update: ${error?.message || "Did you run the SQL schema?"}`);
-      else if (data) {
-        setMeetings((prev) => prev.map((m) => (m.id === data.id ? data : m)));
-        setSelectedMeeting(null);
+    try {
+      if (selectedMeeting) {
+        await updateMeetingHook(selectedMeeting.id, payload);
+      } else {
+        await addMeeting(payload);
       }
-    } else {
-      const { data, error } = await createMeeting({ ...payload, user_id: user.id });
-      if (error) alert(`Failed to save: ${error?.message || "Did you run the SQL schema?"}`);
-      else if (data) {
-        setMeetings((prev) => [data, ...prev]);
-        setSelectedMeeting(null);
-      }
+      setSelectedMeeting(null);
+    } catch (err: any) {
+      addToast(err.message || "Failed to save meeting", "urgent");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   const handleDelete = async (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (!window.confirm("Delete this meeting?")) return;
-    await deleteMeeting(id);
-    setMeetings((prev) => prev.filter((m) => m.id !== id));
-    if (selectedMeeting?.id === id) setSelectedMeeting(null);
+    try {
+      await removeMeeting(id);
+      if (selectedMeeting?.id === id) setSelectedMeeting(null);
+    } catch (err: any) {
+      addToast(err.message || "Failed to delete", "urgent");
+    }
+  };
+
+  const handleBulkDelete = async (ids: string[]) => {
+    if (!window.confirm("Delete selected meetings?")) return;
+    setDeletingBulk(true);
+    try {
+      await Promise.all(ids.map(id => removeMeeting(id)));
+    } catch (err: any) {
+      addToast(err.message || "Bulk delete failed", "urgent");
+    } finally {
+      setDeletingBulk(false);
+    }
   };
 
   const launchMeeting = (url: string, e?: React.MouseEvent) => {
@@ -189,16 +200,19 @@ const MeetingsPage = () => {
     window.open(finalUrl, "_blank", "noopener,noreferrer");
   };
 
+  const sortedMeetings = useMemo(() => {
+    return [...meetings].sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
+  }, [meetings]);
+
   const now = new Date();
-  const sortedMeetings = useMemo(() => [...meetings].sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()), [meetings]);
   const upcomingMeetings = sortedMeetings.filter((m) => new Date(m.scheduled_at).getTime() >= now.getTime() - 60000 * 30);
   const pastMeetings = sortedMeetings.filter((m) => new Date(m.scheduled_at).getTime() < now.getTime() - 60000 * 30).reverse();
+
   const upcomingPagination = usePagination(upcomingMeetings);
   const pastPagination = usePagination(pastMeetings);
-  const upcomingSelection = useBulkSelection(upcomingMeetings, (meeting) => meeting.id);
-  const pastSelection = useBulkSelection(pastMeetings, (meeting) => meeting.id);
+  const upcomingSelection = useBulkSelection(upcomingMeetings, (meeting: MeetingLink) => meeting.id);
+  const pastSelection = useBulkSelection(pastMeetings, (meeting: MeetingLink) => meeting.id);
   const upcomingPageState = upcomingSelection.getPageState(upcomingPagination.paginatedItems);
-  const pastPageState = pastSelection.getPageState(pastPagination.paginatedItems);
 
   const getCountdownText = (isoString: string) => {
     const d = new Date(isoString);
@@ -213,19 +227,15 @@ const MeetingsPage = () => {
 
   const deleteSelected = async (selection: ReturnType<typeof useBulkSelection<MeetingLink>>) => {
     if (selection.selectedCount === 0) return;
-    if (!window.confirm(`Delete ${selection.selectedCount} selected meeting(s)?`)) return;
-    setDeletingBulk(true);
     const ids = Array.from(selection.selectedIds);
-    await Promise.all(ids.map((id) => deleteMeeting(id)));
-    setMeetings((prev) => prev.filter((meeting) => !selection.selectedIds.has(meeting.id)));
+    await handleBulkDelete(ids);
     if (selectedMeeting && selection.selectedIds.has(selectedMeeting.id)) setSelectedMeeting(null);
     upcomingSelection.clearSelection();
     pastSelection.clearSelection();
-    setDeletingBulk(false);
   };
 
   return (
-    <div className="h-[calc(100vh-theme(spacing.16))] flex flex-col xl:flex-row gap-6 relative">
+    <div className="h-[calc(100vh-theme(spacing.16))] flex flex-col lg:flex-row gap-6 relative">
       <div className="absolute top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
         {toasts.map((t) => (
           <div
@@ -238,229 +248,264 @@ const MeetingsPage = () => {
         ))}
       </div>
 
-      <div className="flex-1 flex flex-col gap-4 min-h-0 overflow-y-auto pr-2 pb-8 custom-scrollbar">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">Calendar</span>
-            <h2 className="text-lg font-bold text-slate-100 uppercase tracking-widest">Meetings</h2>
-          </div>
-          <button className="btn-primary text-sm px-4 py-2 xl:hidden" onClick={() => setSelectedMeeting(null)}>
-            + Schedule
+      <div className="flex-1 flex flex-col min-h-0 bg-slate-900/40 rounded-2xl border border-slate-800 overflow-hidden backdrop-blur-sm">
+        <ModuleHeader
+          title="Meeting Links"
+          description="SCHEDULE AND JOIN VIRTUAL MEETINGS"
+          icon="📅"
+        >
+          <button
+            onClick={() => setSelectedMeeting(null)}
+            className="btn-primary py-2 px-4 text-xs font-bold"
+          >
+            New Meeting
           </button>
-        </div>
+        </ModuleHeader>
 
-        {loading ? (
-          <div className="flex justify-center p-12"><InlineSpinner /></div>
-        ) : (
-          <>
-            <div>
-              <div className="flex items-center justify-between gap-3 mb-3 sticky top-0 bg-background/95 backdrop-blur py-2 z-10">
-                <h3 className="text-slate-400 font-semibold">Upcoming Meetings</h3>
-              </div>
-
-              <BulkDeleteBar
-                count={upcomingSelection.selectedCount}
-                label="upcoming meetings"
-                onDelete={() => deleteSelected(upcomingSelection)}
-                onClear={upcomingSelection.clearSelection}
-                busy={deletingBulk}
-              />
-
-              {upcomingMeetings.length === 0 ? (
-                <div className="glass-panel p-8 text-center text-slate-500 border-dashed mt-3">No upcoming meetings scheduled.</div>
-              ) : (
-                <div className="flex flex-col gap-3 mt-3">
-                  <div className="flex items-center gap-3 px-2 py-2 text-sm text-slate-400">
-                    <IndeterminateCheckbox
-                      checked={upcomingPageState.checked}
-                      indeterminate={upcomingPageState.indeterminate}
-                      onChange={() => upcomingSelection.togglePage(upcomingPagination.paginatedItems)}
-                      ariaLabel="Select all visible upcoming meetings"
-                    />
-                    <span>Select visible meetings</span>
-                  </div>
-                  {upcomingPagination.paginatedItems.map((m) => {
-                    const mDate = new Date(m.scheduled_at);
-                    const diffMins = Math.round((mDate.getTime() - now.getTime()) / 60000);
-                    const isSoon = diffMins >= 0 && diffMins <= 30;
-                    return (
-                      <div
-                        key={m.id}
-                        onClick={() => setSelectedMeeting(m)}
-                        className={`glass-panel p-4 flex flex-col sm:flex-row sm:items-center gap-4 cursor-pointer transition hover:border-slate-500 ${selectedMeeting?.id === m.id ? "border-primary shadow-[0_0_15px_rgba(56,189,248,0.15)]" : ""}`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={upcomingSelection.isSelected(m.id)}
-                          onChange={() => upcomingSelection.toggleOne(m.id)}
-                          onClick={(event) => event.stopPropagation()}
-                          className="h-4 w-4 accent-primary mt-1"
-                          aria-label={`Select ${m.title}`}
-                        />
-                        <div className="flex-1 flex flex-col min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${platformColor(m.platform)}`}>{m.platform}</span>
-                            {isSoon ? <span className="text-[10px] bg-red-500/20 text-red-400 font-bold px-2 py-0.5 rounded animate-pulse">SOON</span> : null}
-                          </div>
-                          <h4 className="text-slate-100 font-bold truncate text-lg" title={m.title}>{m.title}</h4>
-                          <p className="text-sm text-slate-400">{mDate.toLocaleDateString()} at {mDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
-                        </div>
-                        <div className="flex items-center gap-4 shrink-0 justify-between sm:justify-end">
-                          <div className="text-right">
-                            <span className="text-sm font-medium text-slate-300 bg-slate-800/50 px-3 py-1.5 rounded-md inline-block">{getCountdownText(m.scheduled_at)}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button onClick={(e) => handleDelete(m.id, e)} className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-rose-500/10 text-slate-500 hover:text-rose-400 transition" title="Delete">×</button>
-                            <button onClick={(e) => launchMeeting(m.meeting_url, e)} className="btn-primary">Join Now</button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {upcomingMeetings.length > 0 ? (
-                <div className="mt-3 rounded-xl border border-slate-800 bg-slate-900/20">
-                  <PaginationControls
-                    currentPage={upcomingPagination.currentPage}
-                    pageSize={upcomingPagination.pageSize}
-                    totalItems={upcomingPagination.totalItems}
-                    totalPages={upcomingPagination.totalPages}
-                    startItem={upcomingPagination.startItem}
-                    endItem={upcomingPagination.endItem}
-                    onPageChange={upcomingPagination.setCurrentPage}
-                    onPageSizeChange={upcomingPagination.setPageSize}
-                    itemLabel="upcoming meetings"
+        {meetingsLoading ? (
+            <div className="flex h-64 items-center justify-center">
+              <InlineSpinner />
+            </div>
+          ) : (
+          <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-hide">
+             <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs uppercase tracking-widest text-slate-500 font-bold">Upcoming</h3>
+                  <BulkDeleteBar 
+                    count={upcomingSelection.selectedCount} 
+                    label="upcoming meetings"
+                    onDelete={() => deleteSelected(upcomingSelection)} 
+                    onClear={() => upcomingSelection.clearSelection()}
+                    busy={deletingBulk}
                   />
                 </div>
-              ) : null}
-            </div>
-
-            <div className="mt-8">
-              <div className="flex items-center justify-between gap-3 mb-3 sticky top-0 bg-background/95 backdrop-blur py-2 z-10">
-                <h3 className="text-slate-400 font-semibold">Past Meetings</h3>
-              </div>
-
-              <BulkDeleteBar
-                count={pastSelection.selectedCount}
-                label="past meetings"
-                onDelete={() => deleteSelected(pastSelection)}
-                onClear={pastSelection.clearSelection}
-                busy={deletingBulk}
-              />
-
-              {pastMeetings.length === 0 ? (
-                <div className="text-sm text-slate-500 italic pl-2 mt-3">No past meetings.</div>
-              ) : (
-                <div className="flex flex-col gap-2 opacity-60 hover:opacity-100 transition duration-300 mt-3">
-                  <div className="flex items-center gap-3 px-2 py-2 text-sm text-slate-400">
-                    <IndeterminateCheckbox
-                      checked={pastPageState.checked}
-                      indeterminate={pastPageState.indeterminate}
-                      onChange={() => pastSelection.togglePage(pastPagination.paginatedItems)}
-                      ariaLabel="Select all visible past meetings"
-                    />
-                    <span>Select visible meetings</span>
-                  </div>
-                  {pastPagination.paginatedItems.map((m) => {
-                    const mDate = new Date(m.scheduled_at);
-                    return (
-                      <div
-                        key={m.id}
-                        onClick={() => setSelectedMeeting(m)}
-                        className={`bg-surface border border-slate-800 p-3 rounded-lg flex items-center gap-3 cursor-pointer hover:bg-slate-800/50 transition ${selectedMeeting?.id === m.id ? "border-primary/50" : ""}`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={pastSelection.isSelected(m.id)}
-                          onChange={() => pastSelection.toggleOne(m.id)}
-                          onClick={(event) => event.stopPropagation()}
-                          className="h-4 w-4 accent-primary"
-                          aria-label={`Select ${m.title}`}
-                        />
-                        <div className="flex items-center gap-3 w-full">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider shrink-0 ${platformColor(m.platform)}`}>{m.platform}</span>
-                          <span className="text-slate-300 font-medium truncate flex-1">{m.title}</span>
-                          <button onClick={(e) => handleDelete(m.id, e)} className="text-slate-500 hover:text-rose-400 transition text-sm" title="Delete">×</button>
-                          <span className="text-xs text-slate-500 tabular-nums shrink-0">{mDate.toLocaleDateString()} {mDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                        </div>
+                
+                <div className="grid gap-3">
+                   <div className="flex items-center gap-3 px-4 py-2 text-xxs uppercase tracking-wider text-slate-500 font-bold border-b border-slate-800">
+                      <IndeterminateCheckbox 
+                        checked={upcomingPageState.checked}
+                        indeterminate={upcomingPageState.indeterminate}
+                        onChange={() => upcomingSelection.togglePage(upcomingPagination.paginatedItems)}
+                        ariaLabel="toggle select all upcoming"
+                      />
+                      <span className="flex-1">Meeting Details</span>
+                      <span className="w-32 text-center">Countdown</span>
+                      <span className="w-24 text-right">Actions</span>
+                   </div>
+                   
+                   {upcomingPagination.paginatedItems.map(m => (
+                      <div key={m.id} className="group flex items-center gap-3 px-4 py-3 hover:bg-slate-800/40 rounded-lg transition-colors border border-transparent hover:border-slate-700/50">
+                         <input 
+                            type="checkbox" 
+                            checked={upcomingSelection.isSelected(m.id)}
+                            onChange={() => upcomingSelection.toggleOne(m.id)}
+                            className="rounded border-slate-700 bg-slate-800 text-primary focus:ring-primary/20"
+                         />
+                         <div className="flex-1 min-w-0" onClick={() => setSelectedMeeting(m)}>
+                            <div className="flex items-center gap-2">
+                               <span className="text-slate-100 font-medium truncate">{m.title}</span>
+                               <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-tight ${platformColor(m.platform)}`}>
+                                  {m.platform}
+                               </span>
+                            </div>
+                            <div className="text-xs text-slate-500 mt-0.5 font-mono">
+                               {new Date(m.scheduled_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                            </div>
+                         </div>
+                         <div className="w-32 text-center">
+                            <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-1 rounded">
+                               {getCountdownText(m.scheduled_at)}
+                            </span>
+                         </div>
+                         <div className="w-24 flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={(e) => launchMeeting(m.meeting_url, e)} className="p-1.5 hover:bg-primary/20 rounded text-primary" title="Join">🚀</button>
+                            <button onClick={(e) => handleDelete(m.id, e)} className="p-1.5 hover:bg-rose-500/20 rounded text-rose-400" title="Delete">🗑️</button>
+                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                   ))}
 
-              {pastMeetings.length > 0 ? (
-                <div className="mt-3 rounded-xl border border-slate-800 bg-slate-900/20">
-                  <PaginationControls
-                    currentPage={pastPagination.currentPage}
-                    pageSize={pastPagination.pageSize}
-                    totalItems={pastPagination.totalItems}
-                    totalPages={pastPagination.totalPages}
-                    startItem={pastPagination.startItem}
-                    endItem={pastPagination.endItem}
-                    onPageChange={pastPagination.setCurrentPage}
-                    onPageSizeChange={pastPagination.setPageSize}
-                    itemLabel="past meetings"
+                   {upcomingMeetings.length === 0 && (
+                      <div className="py-12 text-center text-slate-500 text-sm border border-dashed border-slate-800 rounded-xl bg-slate-800/20">
+                         No upcoming meetings.
+                      </div>
+                   )}
+                </div>
+                
+                {upcomingMeetings.length > upcomingPagination.pageSize && (
+                   <PaginationControls 
+                      currentPage={upcomingPagination.currentPage}
+                      pageSize={upcomingPagination.pageSize}
+                      totalItems={upcomingPagination.totalItems}
+                      totalPages={upcomingPagination.totalPages}
+                      startItem={upcomingPagination.startItem}
+                      endItem={upcomingPagination.endItem}
+                      onPageChange={upcomingPagination.setCurrentPage}
+                      onPageSizeChange={upcomingPagination.setPageSize}
+                      itemLabel="upcoming meetings"
+                   />
+                )}
+             </div>
+
+             <div className="space-y-4 pt-4 border-t border-slate-800/50">
+                <div className="flex items-center justify-between">
+                   <h3 className="text-xs uppercase tracking-widest text-slate-600 font-bold">Past Meetings</h3>
+                   <BulkDeleteBar 
+                    count={pastSelection.selectedCount} 
+                    label="past meetings"
+                    onDelete={() => deleteSelected(pastSelection)} 
+                    onClear={() => pastSelection.clearSelection()}
+                    busy={deletingBulk}
                   />
                 </div>
-              ) : null}
-            </div>
-          </>
+
+                <div className="grid gap-2 opacity-60 hover:opacity-100 transition-opacity">
+                   {pastPagination.paginatedItems.map(m => (
+                      <div key={m.id} className="group flex items-center gap-3 px-4 py-2 hover:bg-slate-800/30 rounded-lg transition-colors">
+                         <input 
+                            type="checkbox" 
+                            checked={pastSelection.isSelected(m.id)}
+                            onChange={() => pastSelection.toggleOne(m.id)}
+                            className="rounded border-slate-800 bg-slate-900 text-primary/40 focus:ring-primary/10"
+                         />
+                         <div className="flex-1 min-w-0" onClick={() => setSelectedMeeting(m)}>
+                            <div className="flex items-center gap-2">
+                               <span className="text-slate-400 text-sm truncate">{m.title}</span>
+                               <span className="text-[9px] text-slate-600">{m.platform}</span>
+                            </div>
+                         </div>
+                         <div className="text-right flex items-center gap-3">
+                            <span className="text-xxs font-mono text-slate-600">
+                               {new Date(m.scheduled_at).toLocaleDateString()}
+                            </span>
+                            <button onClick={(e) => handleDelete(m.id, e)} className="p-1.5 hover:bg-rose-500/10 rounded text-rose-500/40 opacity-0 group-hover:opacity-100">🗑️</button>
+                         </div>
+                      </div>
+                   ))}
+                </div>
+
+                {pastMeetings.length > pastPagination.pageSize && (
+                   <PaginationControls 
+                      currentPage={pastPagination.currentPage}
+                      pageSize={pastPagination.pageSize}
+                      totalItems={pastPagination.totalItems}
+                      totalPages={pastPagination.totalPages}
+                      startItem={pastPagination.startItem}
+                      endItem={pastPagination.endItem}
+                      onPageChange={pastPagination.setCurrentPage}
+                      onPageSizeChange={pastPagination.setPageSize}
+                      itemLabel="past meetings"
+                   />
+                )}
+             </div>
+          </div>
         )}
       </div>
 
-      <div className="xl:w-96 flex flex-col shrink-0">
-        <div className="glass-panel flex-1 flex flex-col p-5 sticky top-0">
-          <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-800">
-            <h2 className="text-lg font-bold text-slate-200">{selectedMeeting ? "Edit Meeting" : "Schedule New"}</h2>
-            {selectedMeeting ? <button type="button" onClick={() => setSelectedMeeting(null)} className="text-primary text-sm hover:underline">+ New</button> : null}
-          </div>
+      <div className="w-full lg:w-[400px] shrink-0 bg-surface rounded-2xl border border-slate-800 shadow-2xl overflow-hidden flex flex-col h-full">
+         <div className="p-6 border-b border-slate-800 bg-slate-800/20 backdrop-blur-md">
+            <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+               <span>{selectedMeeting ? "📅 Edit Meeting" : "✨ New Meeting"}</span>
+            </h2>
+            <p className="text-xs text-slate-500 mt-1 uppercase tracking-wider font-medium">Configure meeting details</p>
+         </div>
 
-          <form onSubmit={handleSave} className="flex flex-col gap-4 flex-1 overflow-y-auto pr-1">
-            <label className="block space-y-1">
-              <span className="text-sm text-slate-400">Meeting Title <span className="text-rose-500">*</span></span>
-              <input className="w-full bg-surface border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary" placeholder="E.g. Daily Standup" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block space-y-1">
-                <span className="text-sm text-slate-400">Date <span className="text-rose-500">*</span></span>
-                <input type="date" className="w-full bg-surface border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-sm text-slate-400">Time (Local) <span className="text-rose-500">*</span></span>
-                <input type="time" className="w-full bg-surface border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary" required value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} />
-              </label>
-            </div>
-            <label className="block space-y-1">
-              <span className="text-sm text-slate-400">Platform</span>
-              <select className="w-full bg-surface border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary appearance-none" value={form.platform} onChange={(e) => setForm({ ...form, platform: e.target.value })}>
-                <option value="Zoom">Zoom</option>
-                <option value="Google Meet">Google Meet</option>
-                <option value="Teams">Microsoft Teams</option>
-                <option value="Custom">Other / Custom</option>
-              </select>
-            </label>
-            <label className="block space-y-1">
-              <span className="text-sm text-slate-400">Meeting URL <span className="text-rose-500">*</span></span>
-              <input className="w-full bg-surface border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary font-mono text-xs" placeholder="https://zoom.us/j/..." required value={form.meeting_url} onChange={(e) => setForm({ ...form, meeting_url: e.target.value })} />
-            </label>
-            <label className="block space-y-1 flex-1">
-              <span className="text-sm text-slate-400">Description / Passcode</span>
-              <textarea className="w-full h-24 bg-surface border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary resize-none" placeholder="Optional details, agenda, or passcodes..." value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-            </label>
-            <div className="pt-4 border-t border-slate-800 mt-auto">
-              <button type="submit" disabled={saving || !form.title || !form.meeting_url || !form.date || !form.time} className="btn-primary w-full py-2.5 flex items-center justify-center gap-2 text-sm font-semibold">
-                {saving ? "Saving..." : selectedMeeting ? "Update Meeting" : "Schedule Meeting"}
-              </button>
-            </div>
-          </form>
-        </div>
+         <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
+            <form id="meeting-form" onSubmit={handleSave} className="space-y-5">
+               <div className="space-y-1.5">
+                  <label className="text-xxs uppercase tracking-widest text-slate-500 font-bold ml-1">Title</label>
+                  <input
+                    required
+                    value={form.title}
+                    onChange={e => setForm({ ...form, title: e.target.value })}
+                    className="w-full rounded-xl bg-slate-900 border border-slate-700 px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-slate-600 text-slate-100"
+                    placeholder="E.g. Daily Standup"
+                  />
+               </div>
+
+               <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                     <label className="text-xxs uppercase tracking-widest text-slate-500 font-bold ml-1">Platform</label>
+                     <select
+                       value={form.platform}
+                       onChange={e => setForm({ ...form, platform: e.target.value })}
+                       className="w-full rounded-xl bg-slate-900 border border-slate-700 px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-slate-100"
+                     >
+                        <option>Zoom</option>
+                        <option>Google Meet</option>
+                        <option>Teams</option>
+                        <option>Other</option>
+                     </select>
+                  </div>
+                  <div className="space-y-1.5">
+                     <label className="text-xxs uppercase tracking-widest text-slate-500 font-bold ml-1">Date</label>
+                     <input
+                       type="date"
+                       required
+                       value={form.date}
+                       onChange={e => setForm({ ...form, date: e.target.value })}
+                       className="w-full rounded-xl bg-slate-900 border border-slate-700 px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-slate-100"
+                     />
+                  </div>
+               </div>
+
+               <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                     <label className="text-xxs uppercase tracking-widest text-slate-500 font-bold ml-1">Time</label>
+                     <input
+                       type="time"
+                       required
+                       value={form.time}
+                       onChange={e => setForm({ ...form, time: e.target.value })}
+                       className="w-full rounded-xl bg-slate-900 border border-slate-700 px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-slate-100"
+                     />
+                  </div>
+                  <div className="space-y-1.5">
+                     <label className="text-xxs uppercase tracking-widest text-slate-500 font-bold ml-1">Join URL</label>
+                     <input
+                       required
+                       value={form.meeting_url}
+                       onChange={e => setForm({ ...form, meeting_url: e.target.value })}
+                       className="w-full rounded-xl bg-slate-900 border border-slate-700 px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-slate-600 text-slate-100 font-mono"
+                       placeholder="https://..."
+                     />
+                  </div>
+               </div>
+
+               <div className="space-y-1.5">
+                  <label className="text-xxs uppercase tracking-widest text-slate-500 font-bold ml-1">Description</label>
+                  <textarea
+                    rows={4}
+                    value={form.description}
+                    onChange={e => setForm({ ...form, description: e.target.value })}
+                    className="w-full rounded-xl bg-slate-900 border border-slate-700 px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-slate-600 text-slate-100 resize-none"
+                    placeholder="Notes, agenda, or topics..."
+                  />
+               </div>
+            </form>
+         </div>
+
+         <div className="p-6 border-t border-slate-800 bg-slate-800/10 backdrop-blur-md flex items-center justify-between gap-4">
+            {selectedMeeting ? (
+               <button 
+                  type="button" 
+                  onClick={() => setSelectedMeeting(null)}
+                  className="flex-1 py-3 text-xs font-bold text-slate-400 hover:text-slate-200"
+               >
+                  Cancel
+               </button>
+            ) : null}
+            <button
+              form="meeting-form"
+              disabled={saving}
+              className={`flex-[2] py-3 rounded-xl bg-primary text-slate-900 text-sm font-bold shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+               {saving ? <div className="w-4 h-4 border-2 border-slate-900/30 border-t-slate-900 rounded-full animate-spin" /> : null}
+               {selectedMeeting ? "Update Meeting" : "Schedule Meeting"}
+            </button>
+         </div>
       </div>
     </div>
   );
 };
 
 export default MeetingsPage;
-

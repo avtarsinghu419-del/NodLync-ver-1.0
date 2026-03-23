@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { TaskItem } from "../../../api/projectManagerApi";
+import type { TaskItem } from "../../../api/tasksApi";
 import BulkDeleteBar from "../../../components/BulkDeleteBar";
 import IndeterminateCheckbox from "../../../components/IndeterminateCheckbox";
 import PaginationControls from "../../../components/PaginationControls";
@@ -31,6 +31,7 @@ const STATUS_OPTIONS: Array<{ value: TaskItem["status"]; label: string }> = [
 
 const TasksPanel = ({ tasks, onAdd, onUpdate, onDelete, onBulkDelete, busy }: Props) => {
   const [input, setInput] = useState("");
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [deadline, setDeadline] = useState<string>("");
   const [savingId, setSavingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "done" | "not_done" | "in_progress">("all");
@@ -56,7 +57,11 @@ const TasksPanel = ({ tasks, onAdd, onUpdate, onDelete, onBulkDelete, busy }: Pr
   const pageState = selection.getPageState(pagination.paginatedItems);
 
   const handleAdd = async () => {
-    if (!input.trim()) return;
+    setValidationError(null);
+    if (!input.trim()) {
+      setValidationError("Task title is required.");
+      return;
+    }
     await onAdd({
       title: input.trim(),
       deadline: deadline ? deadline : null,
@@ -97,7 +102,7 @@ const TasksPanel = ({ tasks, onAdd, onUpdate, onDelete, onBulkDelete, busy }: Pr
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           { label: "Total", value: stats.total, color: "text-slate-300" },
           { label: "Not Done", value: stats.notDone, color: "text-slate-400" },
@@ -106,35 +111,48 @@ const TasksPanel = ({ tasks, onAdd, onUpdate, onDelete, onBulkDelete, busy }: Pr
         ].map(({ label, value, color }) => (
           <div key={label} className="glass-panel p-4 text-center">
             <p className={`text-2xl font-bold ${color}`}>{value}</p>
-            <p className="text-xs text-slate-500 mt-1">{label}</p>
+            <p className="text-xs text-slate-500 mt-1 uppercase font-bold tracking-widest">{label}</p>
           </div>
         ))}
       </div>
 
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex-1 flex gap-2 min-w-0">
+      <div className="flex flex-col sm:flex-row items-center gap-3">
+        <div className="flex-1 flex gap-2 w-full">
           <input
-            className="flex-1 rounded-lg border border-slate-700 bg-surface px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary transition placeholder:text-slate-600"
+            className="flex-1 rounded-xl border border-slate-700 bg-surface px-4 py-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition placeholder:text-slate-600 shadow-inner"
             placeholder="Add a task and press Enter..."
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              if (validationError) setValidationError(null);
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter") handleAdd();
             }}
           />
           <input
             type="date"
-            className="w-36 rounded-lg border border-slate-700 bg-surface px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary transition placeholder:text-slate-600"
+            className="w-40 rounded-xl border border-slate-700 bg-surface px-3 py-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition"
             value={deadline}
             onChange={(e) => setDeadline(e.target.value)}
             aria-label="Task deadline"
           />
-          <button className="btn-primary text-sm px-4" onClick={handleAdd} disabled={busy || !input.trim()}>
-            Add Task
+          <button className="btn-primary py-3 px-6 text-sm font-bold shadow-lg shadow-primary/20 active:scale-[0.98]" onClick={handleAdd} disabled={busy || !input.trim()}>
+            ADD
           </button>
         </div>
+      </div>
 
-        <div className="flex items-center gap-1 bg-slate-900 rounded-lg p-1 border border-slate-800">
+      {validationError && (
+        <div className="mt-1">
+          <span className="text-[10px] font-bold text-rose-400 bg-rose-950/40 border border-rose-800/40 px-3 py-1 rounded-full uppercase tracking-widest">
+            ⚠ {validationError}
+          </span>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between flex-wrap gap-4 pt-2">
+        <div className="flex items-center gap-1 bg-slate-900/50 rounded-xl p-1 border border-slate-800/50">
           {(["all", "not_done", "in_progress", "done"] as const).map((f) => (
             <button
               key={f}
@@ -143,96 +161,115 @@ const TasksPanel = ({ tasks, onAdd, onUpdate, onDelete, onBulkDelete, busy }: Pr
                 pagination.setCurrentPage(1);
                 selection.clearSelection();
               }}
-              className={`text-xs px-3 py-1.5 rounded-md transition font-medium ${filter === f ? "bg-slate-700 text-slate-100" : "text-slate-500 hover:text-slate-300"}`}
+              className={`text-[10px] px-4 py-2 rounded-lg transition font-bold uppercase tracking-widest ${filter === f ? "bg-slate-700 text-slate-100 shadow-md" : "text-slate-500 hover:text-slate-300"}`}
             >
               {f === "all" ? "All" : f === "not_done" ? "Not Done" : f === "in_progress" ? "In Progress" : "Done"}
             </button>
           ))}
         </div>
+        
+        <BulkDeleteBar
+          count={selection.selectedCount}
+          label="tasks"
+          onDelete={handleBulkDelete}
+          onClear={selection.clearSelection}
+          busy={bulkDeleting}
+        />
       </div>
 
-      <BulkDeleteBar
-        count={selection.selectedCount}
-        label="tasks"
-        onDelete={handleBulkDelete}
-        onClear={selection.clearSelection}
-        busy={bulkDeleting}
-      />
-
-      <div className="glass-panel divide-y divide-slate-800">
+      <div className="glass-panel overflow-hidden border-slate-800/50">
         {filtered.length === 0 ? (
-          <div className="p-8 text-center">
-            <p className="text-slate-500 text-sm">{filter === "all" ? "No tasks yet. Add your first task above." : `No ${filter.replace("_", " ")} tasks.`}</p>
+          <div className="py-16 flex flex-col items-center justify-center text-center space-y-4">
+             <span className="text-4xl opacity-20">📝</span>
+             <div className="space-y-1">
+                <p className="text-sm font-semibold text-slate-400">{filter === "all" ? "No Tasks Under This Milestone" : `No ${filter.replace("_", " ")} tasks.`}</p>
+                <p className="text-xs text-slate-600">Break down your goals into actionable items.</p>
+             </div>
+             {filter === "all" && (
+                <div className="text-[10px] text-slate-700 font-bold uppercase tracking-widest animate-pulse">
+                   Type above to add your first task ➔
+                </div>
+             )}
           </div>
         ) : (
-          <>
-            <div className="flex items-center gap-3 px-4 py-3 text-xs uppercase tracking-[0.18em] text-slate-500">
+          <div className="divide-y divide-slate-800/50">
+            <div className="flex items-center gap-3 px-6 py-4 text-[10px] uppercase font-bold tracking-widest text-slate-500 bg-slate-800/10">
               <IndeterminateCheckbox
                 checked={pageState.checked}
                 indeterminate={pageState.indeterminate}
                 onChange={() => selection.togglePage(pagination.paginatedItems)}
                 ariaLabel="Select all visible tasks"
               />
-              <span>Visible tasks</span>
+              <span>Project Task Stream</span>
             </div>
             {pagination.paginatedItems.map((task) => {
               const isLoading = savingId === task.id;
               return (
-                <div key={task.id} className="flex items-center gap-4 px-4 py-3 hover:bg-slate-800/30 transition group">
+                <div key={task.id} className="flex items-center gap-4 px-6 py-4 hover:bg-slate-800/20 transition group border-l-2 border-transparent hover:border-primary/40">
                   <input
                     type="checkbox"
                     checked={selection.isSelected(task.id)}
                     onChange={() => selection.toggleOne(task.id)}
-                    className="h-4 w-4 accent-primary"
+                    className="h-4 w-4 accent-primary rounded bg-slate-900 border-slate-700"
                     aria-label={`Select ${task.title}`}
                   />
-                  <span className={`flex-1 text-sm ${task.status === "done" ? "line-through text-slate-500" : "text-slate-200"}`}>{task.title}</span>
-                  <span className="text-xs text-slate-600 hidden group-hover:inline">
-                    {new Date(task.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                  </span>
-                  {task.deadline && (
-                    <span className="text-[10px] text-slate-500 font-mono opacity-80">
-                      Due {formatDeadline(task.deadline)}
-                    </span>
-                  )}
-                  <button className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-rose-400 transition text-sm" onClick={() => onDelete(task.id)} title="Delete task">
-                    ×
-                  </button>
-                  <select
-                    className="rounded-lg border border-slate-700 bg-surface px-2 py-1 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary transition"
-                    value={task.priority}
-                    onChange={(e) => handleUpdate(task, { priority: e.target.value as TaskItem["priority"] })}
-                    disabled={isLoading}
-                    aria-label="Task priority"
-                  >
-                    {PRIORITY_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className="rounded-lg border border-slate-700 bg-surface px-2 py-1 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary transition"
-                    value={task.status}
-                    onChange={(e) => handleUpdate(task, { status: e.target.value as TaskItem["status"], is_completed: e.target.value === "done" })}
-                    disabled={isLoading}
-                    aria-label="Task status"
-                  >
-                    {STATUS_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium transition-colors ${task.status === "done" ? "line-through text-slate-500" : "text-slate-200"}`}>{task.title}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                       <span className="text-[10px] text-slate-600 font-mono">
+                        {new Date(task.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </span>
+                      {task.deadline && (
+                        <span className="text-[10px] text-primary/60 font-medium px-2 py-0.5 rounded-full bg-primary/5 border border-primary/10">
+                          Due {formatDeadline(task.deadline)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <select
+                        className="rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-tight text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition"
+                        value={task.priority}
+                        onChange={(e) => handleUpdate(task, { priority: e.target.value as TaskItem["priority"] })}
+                        disabled={isLoading}
+                        aria-label="Task priority"
+                      >
+                        {PRIORITY_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value} className="bg-slate-900 uppercase">
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        className="rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-tight text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition"
+                        value={task.status}
+                        onChange={(e) => handleUpdate(task, { status: e.target.value as TaskItem["status"], is_completed: e.target.value === "done" })}
+                        disabled={isLoading}
+                        aria-label="Task status"
+                      >
+                        {STATUS_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value} className="bg-slate-900 uppercase">
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <button className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-rose-400 transition-all p-2 bg-slate-800/40 rounded-lg hover:bg-rose-500/10" onClick={() => onDelete(task.id)} title="Delete task">
+                       🗑️
+                    </button>
+                  </div>
                 </div>
               );
             })}
-          </>
+          </div>
         )}
       </div>
 
-      {filtered.length > 0 ? (
-        <div className="glass-panel">
+      {filtered.length > 0 && (
+        <div className="pt-2">
           <PaginationControls
             currentPage={pagination.currentPage}
             pageSize={pagination.pageSize}
@@ -245,10 +282,9 @@ const TasksPanel = ({ tasks, onAdd, onUpdate, onDelete, onBulkDelete, busy }: Pr
             itemLabel="tasks"
           />
         </div>
-      ) : null}
+      )}
     </div>
   );
 };
 
 export default TasksPanel;
-

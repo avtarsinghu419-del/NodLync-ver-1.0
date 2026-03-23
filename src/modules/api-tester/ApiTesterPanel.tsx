@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import ModuleHeader from "../../components/ModuleHeader";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -632,14 +633,11 @@ const ApiTesterPanel = () => {
     <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-6 h-[calc(100vh-theme(spacing.16))]">
       {/* Request builder */}
       <div className="glass-panel flex flex-col overflow-hidden">
-        <div className="px-5 pt-5 pb-3 border-b border-slate-800 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <span className="text-xl">HTTP</span>
-            <h1 className="text-lg font-bold text-slate-100 uppercase tracking-widest">
-              API Tester
-            </h1>
-          </div>
-        </div>
+        <ModuleHeader
+          title="API Tester"
+          description="DEBUG AND TEST HTTP ENDPOINTS"
+          icon="⚡"
+        />
 
         <div className="px-5 pt-5 space-y-4">
           <div className="flex flex-col md:flex-row gap-3">

@@ -16,6 +16,7 @@ const empty = {
 const WorkLogCard = ({ onSubmit, busy, lastSubmitted }: Props) => {
   const [log, setLog] = useState(empty);
   const [submitted, setSubmitted] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const today = new Date().toLocaleDateString("en-US", {
     month: "long",
@@ -27,20 +28,24 @@ const WorkLogCard = ({ onSubmit, busy, lastSubmitted }: Props) => {
     e: React.ChangeEvent<HTMLTextAreaElement>
   ) => {
     setLog((prev) => ({ ...prev, [key]: e.target.value }));
+    if (validationError) setValidationError(null);
     if (submitted) setSubmitted(false);
   };
 
   const handleSubmit = async () => {
-    // Require at least some completed work per spec
-    if (!log.completed.trim()) return;
+    setValidationError(null);
+    if (!log.completed.trim()) {
+      setValidationError("Completed work cannot be empty.");
+      return;
+    }
+    
     try {
       await onSubmit(log);
       setLog(empty);
       setSubmitted(true);
       setTimeout(() => setSubmitted(false), 3000);
     } catch (error) {
-      // Let parent / console handle error surface; avoid fake success
-      // eslint-disable-next-line no-console
+      setValidationError("Failed to post log. Please try again.");
       console.error("ERROR posting daily log", error);
     }
   };
@@ -141,6 +146,11 @@ const WorkLogCard = ({ onSubmit, busy, lastSubmitted }: Props) => {
           Logs are saved per project and visible in the Overview history.
         </div>
         <div className="flex items-center gap-3">
+          {validationError && (
+            <span className="text-xs text-rose-400 bg-rose-900/20 px-2 py-1 rounded">
+              {validationError}
+            </span>
+          )}
           {submitted && (
             <span className="text-xs text-emerald-400 flex items-center gap-1">
               <span>✓</span> Log posted!
@@ -149,7 +159,7 @@ const WorkLogCard = ({ onSubmit, busy, lastSubmitted }: Props) => {
           <button
             className="btn-primary text-sm px-6 py-2"
             onClick={handleSubmit}
-            disabled={busy || (!log.completed.trim() && !log.next_steps.trim())}
+            disabled={busy}
           >
             {busy ? "Posting..." : "Post Daily Log"}
           </button>

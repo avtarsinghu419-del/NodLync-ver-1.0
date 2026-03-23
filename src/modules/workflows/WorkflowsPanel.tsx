@@ -1,595 +1,242 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  createFolder,
-  createWorkflow,
-  deleteFolderCascade,
-  deleteWorkflow,
-  folderNameExists,
-  listFolders,
-  listWorkflows,
-  type WorkflowsRow,
-} from "../../api/workflowsApi";
+import { useState, useEffect, useRef } from "react";
+import ModuleHeader from "../../components/ModuleHeader";
+import { 
+  listWorkflowsV2, 
+  createWorkflowV2, 
+  deleteWorkflowV2, 
+  type WorkflowV2 
+} from "../../api/workflowEditorApi";
+import WorkflowEditor from "./WorkflowEditor";
 import WorkflowReactFlowView from "./WorkflowReactFlowView";
-
-const extractWorkflowName = (parsed: any): string | null => {
-  if (!parsed || typeof parsed !== "object") return null;
-  if (typeof parsed.name === "string" && parsed.name.trim()) return parsed.name.trim();
-  // Some exports may nest
-  if (parsed.workflow && typeof parsed.workflow.name === "string" && parsed.workflow.name.trim()) {
-    return parsed.workflow.name.trim();
-  }
-  return null;
-};
-
-const safePrettyJson = (json: any) => {
-  try {
-    return JSON.stringify(json, null, 2);
-  } catch {
-    return String(json ?? "");
-  }
-};
-
-const downloadTextFile = (fileName: string, text: string, mime = "application/json") => {
-  const blob = new Blob([text], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-};
-
-const stripN8nMeta = (json: any) => {
-  if (!json || typeof json !== "object") return json;
-  if (Array.isArray(json)) return json;
-  const clone: any = { ...json };
-  if (clone.__nodlync) delete clone.__nodlync;
-  return clone;
-};
-
-const getFileNameFromJson = (json: any) => {
-  const v = json?.__nodlync?.fileName;
-  return typeof v === "string" && v.trim() ? v : "workflow.json";
-};
+import InlineSpinner from "../../components/InlineSpinner";
+import useAppStore from "../../store/useAppStore";
 
 const WorkflowsPanel = () => {
+  const { user } = useAppStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [folders, setFolders] = useState<WorkflowsRow[]>([]);
-  const [workflows, setWorkflows] = useState<WorkflowsRow[]>([]);
-  const [folderCounts, setFolderCounts] = useState<Record<string, number>>({});
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
-
-  const [newFolderName, setNewFolderName] = useState("");
-  const [uploadFolderId, setUploadFolderId] = useState<string | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [loadingFolders, setLoadingFolders] = useState(true);
-  const [loadingWorkflows, setLoadingWorkflows] = useState(false);
-
-  const [viewer, setViewer] = useState<WorkflowsRow | null>(null);
-  const [viewerTab, setViewerTab] = useState<"json" | "visual">("json");
+  const [workflows, setWorkflows] = useState<WorkflowV2[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [viewingJson, setViewingJson] = useState<WorkflowV2 | null>(null);
+  
+  const [showCreateMenu, setShowCreateMenu] = useState(false);
+  const [newWorkflowName, setNewWorkflowName] = useState("");
 
   useEffect(() => {
-    const load = async () => {
-      setLoadingFolders(true);
-      setUploadError(null);
-      const { data, error } = await listFolders();
-      if (error) {
-        setUploadError(error.message);
-        setFolders([]);
-        setSelectedFolderId(null);
-        setUploadFolderId(null);
-        setLoadingFolders(false);
-        return;
-      }
-      const list = (data ?? []).filter((r) => r.type === "folder");
-      setFolders(list);
-      const first = list[0]?.id ?? null;
-      setSelectedFolderId((prev) => prev ?? first);
-      setUploadFolderId((prev) => prev ?? first);
-      setLoadingFolders(false);
-    };
-    void load();
-  }, []);
+    if (user) void refreshWorkflows();
+  }, [user]);
 
-  const refreshCounts = async (folderIds: string[]) => {
-    // Simple counts: query workflows for each folder (fast enough for small sets)
-    const counts: Record<string, number> = {};
-    await Promise.all(
-      folderIds.map(async (fid) => {
-        const { data } = await listWorkflows(fid);
-        counts[fid] = (data ?? []).length;
-      })
-    );
-    setFolderCounts(counts);
+  const refreshWorkflows = async () => {
+    if (!user) return;
+    setLoading(true);
+    const { data } = await listWorkflowsV2(user.id);
+    if (data) setWorkflows(data);
+    setLoading(false);
   };
 
-  const refreshWorkflows = async (folderId: string | null) => {
-    if (!folderId) {
-      setWorkflows([]);
-      return;
+  const handleCreateVisual = async () => {
+    if (!user) return;
+    const { data } = await createWorkflowV2({
+      name: newWorkflowName.trim() || "New Visual Automation",
+      user_id: user.id,
+      workflow_type: 'visual'
+    });
+    if (data) {
+      setWorkflows(prev => [data, ...prev]);
+      setEditingId(data.id);
+      setNewWorkflowName("");
+      setShowCreateMenu(false);
     }
-    setLoadingWorkflows(true);
-    const { data, error } = await listWorkflows(folderId);
-    if (error) {
-      setUploadError(error.message);
-      setWorkflows([]);
-      setLoadingWorkflows(false);
-      return;
-    }
-    setWorkflows(data ?? []);
-    setLoadingWorkflows(false);
   };
 
-  useEffect(() => {
-    void refreshWorkflows(selectedFolderId);
-  }, [selectedFolderId]);
-
-  useEffect(() => {
-    if (folders.length) void refreshCounts(folders.map((f) => f.id));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [folders.length]);
-
-  const selectedFolder = useMemo(
-    () => folders.find((f) => f.id === selectedFolderId) ?? null,
-    [folders, selectedFolderId]
-  );
-
-  const handleCreateFolder = () => {
-    const run = async () => {
-      const name = newFolderName.trim();
-      if (!name) return;
-      setUploadError(null);
-      const exists = await folderNameExists(name);
-      if (exists) {
-        setUploadError("Folder name already exists.");
-        return;
-      }
-      const { data, error } = await createFolder(name);
-      if (error) {
-        setUploadError(error.message);
-        return;
-      }
-      if (data) {
-        setFolders((prev) => [...prev, data]);
-        setNewFolderName("");
-        setSelectedFolderId(data.id);
-        setUploadFolderId(data.id);
-        setFolderCounts((prev) => ({ ...prev, [data.id]: 0 }));
-      }
-    };
-    void run();
-  };
-
-  const handleDeleteWorkflow = (id: string) => {
-    const run = async () => {
-      await deleteWorkflow(id);
-      setWorkflows((prev) => prev.filter((w) => w.id !== id));
-      if (selectedFolderId) {
-        setFolderCounts((prev) => ({
-          ...prev,
-          [selectedFolderId]: Math.max(0, (prev[selectedFolderId] ?? 0) - 1),
-        }));
-      }
-    };
-    void run();
-    if (viewer?.id === id) setViewer(null);
-  };
-
-  const handleUploadFiles = async (files: FileList | File[]) => {
-    const folderId = uploadFolderId ?? selectedFolderId;
-    if (!folderId) {
-      setUploadError("Create or select a folder first.");
-      return;
-    }
-
-    const list = Array.from(files);
-    if (list.length === 0) return;
-
-    // Validate types
-    const invalid = list.filter((f) => !f.name.toLowerCase().endsWith(".json"));
-    if (invalid.length) {
-      setUploadError("Only .json files are allowed.");
-      return;
-    }
-
-    setUploading(true);
-    setUploadError(null);
-
-    try {
-      const invalidFiles: string[] = [];
-      const created: WorkflowsRow[] = [];
-      for (const file of list) {
+  const handleImportJson = async (files: FileList) => {
+    if (!user) return;
+    for (const file of Array.from(files)) {
+      try {
         const text = await file.text();
-        let parsed: any;
-        try {
-          parsed = JSON.parse(text);
-        } catch (e: any) {
-          invalidFiles.push(`${file.name}: ${e?.message || "Invalid JSON"}`);
-          continue;
-        }
-
-        const workflowName = extractWorkflowName(parsed) ?? file.name.replace(/\.json$/i, "");
-        const json_data = {
-          ...parsed,
-          __nodlync: {
-            fileName: file.name,
-            importedAt: new Date().toISOString(),
-          },
-        };
-
-        const { data, error } = await createWorkflow({
-          name: workflowName,
-          parent_id: folderId,
-          json_data,
+        const parsed = JSON.parse(text);
+        const { data } = await createWorkflowV2({
+          name: file.name.replace(".json", ""),
+          user_id: user.id,
+          workflow_type: 'imported',
+          json_data: parsed
         });
-        if (error) {
-          invalidFiles.push(`${file.name}: ${error.message}`);
-          continue;
-        }
-        if (data) created.push(data);
-      }
-
-      if (invalidFiles.length) {
-        setUploadError(`Some files were skipped:\n${invalidFiles.join("\n")}`);
-      }
-
-      if (created.length) {
-        // If currently viewing this folder, prepend
-        if (selectedFolderId === folderId) {
-          setWorkflows((prev) => [...created, ...prev]);
-        }
-        setFolderCounts((prev) => ({
-          ...prev,
-          [folderId]: (prev[folderId] ?? 0) + created.length,
-        }));
-      }
-
-      setSelectedFolderId(folderId);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    } finally {
-      setUploading(false);
+        if (data) setWorkflows(prev => [data, ...prev]);
+      } catch (err) { console.error("Import failed:", err); }
     }
+    setShowCreateMenu(false);
   };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Permanently delete this automation?")) return;
+    await deleteWorkflowV2(id);
+    setWorkflows(prev => prev.filter(w => w.id !== id));
+  };
+
+  if (editingId) {
+    return (
+      <WorkflowEditor 
+        workflowId={editingId} 
+        onClose={() => {
+           setEditingId(null);
+           void refreshWorkflows();
+        }} 
+      />
+    );
+  }
 
   return (
-    <div className="h-[calc(100vh-theme(spacing.16))] grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)] gap-6">
-      {/* Sidebar: folders */}
-      <div className="glass-panel flex flex-col overflow-hidden">
-        <div className="p-5 border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">Folder</span>
-            <h2 className="text-lg font-bold text-slate-100 uppercase tracking-widest">
-              Workflows
-            </h2>
-          </div>
-          <p className="text-sm text-slate-400 mt-2">
-            Upload and organize n8n workflow exports (.json) in Supabase.
-          </p>
-        </div>
+    <div className="flex flex-col h-full bg-slate-950/20 overflow-hidden">
+      <ModuleHeader 
+        title="Automations" 
+        description="NODE ENGINE" 
+        icon="⚡"
+      >
+        <div className="relative">
+           <button 
+             onClick={() => setShowCreateMenu(!showCreateMenu)}
+             className="px-8 py-3 bg-primary text-slate-900 font-black tracking-widest uppercase text-[10px] rounded-xl hover:brightness-110 shadow-lg shadow-primary/20 transition-all active:scale-95 flex items-center gap-2"
+           >
+              Create Flow <span className={showCreateMenu ? 'rotate-180 transition-transform' : 'transition-transform'}>▼</span>
+           </button>
 
-        <div className="p-4 border-b border-slate-800 bg-slate-900/30">
-          <div className="flex gap-2">
-            <input
-              className="flex-1 bg-surface border border-slate-700 rounded-md px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-slate-600"
-              placeholder="New folder name..."
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleCreateFolder();
-              }}
-            />
-            <button
-              type="button"
-              className="btn-primary px-3 py-2 text-sm"
-              onClick={handleCreateFolder}
-              disabled={!newFolderName.trim()}
-              title="Create folder"
-            >
-              Add
-            </button>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
-          {loadingFolders ? (
-            <div className="p-4 text-sm text-slate-500">Loading folders...</div>
-          ) : folders.length === 0 ? (
-            <div className="p-4 text-sm text-slate-500">
-              No folders yet. Create one above.
-            </div>
-          ) : (
-            folders.map((f) => {
-              const active = f.id === selectedFolderId;
-              const count = folderCounts[f.id] ?? 0;
-              return (
-                <div
-                  key={f.id}
-                  className={`group w-full px-3 py-2.5 rounded-lg border transition flex items-center justify-between gap-3 ${
-                    active
-                      ? "bg-primary/15 border-primary/30 text-primary"
-                      : "bg-surface/30 border-slate-800 text-slate-200 hover:bg-slate-800/40"
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setSelectedFolderId(f.id)}
-                    className="flex-1 text-left min-w-0"
-                    title={f.name}
-                  >
-                    <span className="font-medium truncate block">{f.name}</span>
-                  </button>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500 tabular-nums">{count}</span>
-                    <button
-                      type="button"
-                      className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-rose-400 transition"
-                      title="Delete folder (and all workflows inside)"
-                      onClick={() => {
-                        const ok = window.confirm(
-                          `Delete folder "${f.name}" and all workflows inside?`
-                        );
-                        if (!ok) return;
-                        const run = async () => {
-                          const { error } = await deleteFolderCascade(f.id);
-                          if (error) {
-                            setUploadError(error.message);
-                            return;
-                          }
-                          setFolders((prev) => prev.filter((x) => x.id !== f.id));
-                          setFolderCounts((prev) => {
-                            const next = { ...prev };
-                            delete next[f.id];
-                            return next;
-                          });
-                          if (selectedFolderId === f.id) {
-                            const remaining = folders.filter((x) => x.id !== f.id);
-                            const nextId = remaining[0]?.id ?? null;
-                            setSelectedFolderId(nextId);
-                            setUploadFolderId(nextId);
-                            setWorkflows([]);
-                          }
-                        };
-                        void run();
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
+           {showCreateMenu && (
+             <div className="absolute right-0 top-full mt-2 w-72 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="space-y-4">
+                   <div>
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2 px-1">Flow Identity</label>
+                      <input 
+                        value={newWorkflowName}
+                        onChange={(e) => setNewWorkflowName(e.target.value)}
+                        placeholder="Automation Name..."
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-slate-100 placeholder:text-slate-700"
+                        onKeyDown={(e) => e.key === 'Enter' && handleCreateVisual()}
+                      />
+                   </div>
+                   <div className="h-px bg-slate-800" />
+                   <button 
+                     onClick={handleCreateVisual}
+                     className="w-full text-left p-3 rounded-xl hover:bg-primary/10 group transition-all"
+                   >
+                      <p className="text-xs font-bold text-slate-200 group-hover:text-primary tracking-tight">◈ Empty Visual Canvas</p>
+                      <p className="text-[9px] text-slate-600 font-bold uppercase mt-0.5">Start from scratch</p>
+                   </button>
+                   <button 
+                     onClick={() => fileInputRef.current?.click()}
+                     className="w-full text-left p-3 rounded-xl hover:bg-primary/10 group transition-all"
+                   >
+                      <p className="text-xs font-bold text-slate-200 group-hover:text-primary tracking-tight">⊞ Import JSON File</p>
+                      <p className="text-[9px] text-slate-600 font-bold uppercase mt-0.5">n8n or custom exports</p>
+                   </button>
+                   <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={(e) => e.target.files && handleImportJson(e.target.files)} />
                 </div>
-              );
-            })
-          )}
+             </div>
+           )}
         </div>
-      </div>
+      </ModuleHeader>
 
-      {/* Main: upload + list */}
-      <div className="glass-panel flex flex-col overflow-hidden">
-        <div className="p-5 border-b border-slate-800 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="min-w-0">
-            <h3 className="text-lg font-semibold text-slate-100 truncate">
-              {selectedFolder ? selectedFolder.name : "All Workflows"}
-            </h3>
-            <p className="text-sm text-slate-400 mt-1">
-              Upload single or multiple n8n exports. We’ll extract the workflow name when possible.
-            </p>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-            <select
-              className="rounded-md border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary"
-              value={uploadFolderId ?? ""}
-              onChange={(e) => setUploadFolderId(e.target.value)}
-            >
-              {folders.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
-                </option>
-              ))}
-            </select>
-
-            <div className="flex items-center gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".json,application/json"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  if (e.target.files) void handleUploadFiles(e.target.files);
-                }}
-              />
-              <button
-                type="button"
-                className={`btn-primary px-4 py-2 text-sm ${uploading ? "opacity-70 cursor-not-allowed" : ""}`}
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading || folders.length === 0}
-              >
-                {uploading ? "Uploading..." : "Upload"}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {uploadError ? (
-          <div className="px-5 pt-4">
-            <div className="rounded-md border border-rose-700 bg-rose-900/30 px-3 py-2 text-xs text-rose-100">
-              {uploadError}
-            </div>
-          </div>
-        ) : null}
-
-        <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
-          {loadingWorkflows ? (
-            <div className="p-8 text-sm text-slate-500">Loading workflows...</div>
-          ) : workflows.length === 0 ? (
-            <div className="glass-panel p-10 text-center text-slate-500 border-dashed">
-              {selectedFolderId
-                ? "No workflows in this folder yet. Upload one or more `.json` exports to get started."
-                : "Create or select a folder to start uploading workflows."}
-            </div>
-          ) : (
-            <div className="overflow-hidden rounded-xl border border-slate-800 bg-surface/20">
-              <div className="p-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {workflows.map((w) => {
-                    const fileName = getFileNameFromJson(w.json_data);
-                    const isInvalid = !w.json_data;
-                    const jsonWithoutMeta = stripN8nMeta(w.json_data);
-                    return (
-                      <div
-                        key={w.id}
-                        className="glass-panel p-4 flex flex-col gap-3 rounded-xl border border-slate-800/60 bg-slate-950/10"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-slate-100 truncate">
-                              {w.name || "Unnamed workflow"}
-                            </p>
-                            <p className="text-xs text-slate-500 truncate">
-                              Added {new Date(w.created_at).toLocaleString()}
-                            </p>
-                          </div>
-                          {isInvalid ? (
-                            <span className="inline-flex items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-[11px] text-rose-200">
-                              Invalid
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[11px] text-emerald-200">
-                              Ready
-                            </span>
-                          )}
+      <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+         <div className="max-w-7xl mx-auto">
+            {loading && workflows.length === 0 ? (
+               <div className="p-20 flex justify-center"><InlineSpinner /></div>
+            ) : workflows.length === 0 ? (
+               <div className="p-20 border-2 border-dashed border-slate-800 rounded-3xl text-center space-y-4 opacity-50 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-700 group">
+                  <span className="text-5xl block group-hover:scale-110 transition-transform">🤖</span>
+                  <p className="text-sm font-bold uppercase tracking-widest text-slate-400">Deploy your first logic engine above.</p>
+               </div>
+            ) : (
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  {workflows.map(wf => (
+                     <div key={wf.id} className="glass-panel p-0 overflow-hidden relative group hover:border-primary/40 transition-all group shadow-2xl shadow-black/40 bg-slate-950/20">
+                        {/* Header Section */}
+                        <div className="p-6 border-b border-slate-900 bg-slate-900/10">
+                           <div className="flex items-center justify-between mb-2">
+                              <span className="text-2xl">{wf.workflow_type === 'visual' ? '◈' : '⊞'}</span>
+                              <button onClick={() => handleDelete(wf.id)} className="p-1 px-2.5 bg-slate-900 hover:bg-rose-500/10 border border-slate-800 rounded-xl text-rose-500/50 hover:text-rose-500 transition-all text-xs">🗑️</button>
+                           </div>
+                           <h4 className="text-base font-black text-slate-100 tracking-tighter truncate uppercase">{wf.name}</h4>
+                           <p className="text-[10px] text-slate-500 font-black tracking-widest mt-1">ENGINE VERSION 2.0</p>
                         </div>
 
-                        <div className="min-w-0">
-                          <p
-                            className="text-sm text-slate-300 font-mono truncate"
-                            title={fileName}
-                          >
-                            {fileName}
-                          </p>
+                        {/* Status/Type Area */}
+                        <div className="px-6 py-4 flex items-center justify-between border-b border-slate-900 bg-black/20">
+                           <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Node Cluster</span>
+                           <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${wf.workflow_type === 'visual' ? 'border-primary/30 bg-primary/10 text-primary' : 'border-slate-700 bg-slate-800/50 text-slate-400'}`}>
+                              {wf.workflow_type || 'visual'}
+                           </span>
                         </div>
 
-                        <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between mt-auto">
-                          <button
-                            type="button"
-                            className="btn-ghost px-3 py-1.5 text-xs"
-                            onClick={() => {
-                              setViewer(w);
-                              setViewerTab("json");
-                            }}
-                          >
-                            View
-                          </button>
-
-                          <div className="flex items-center gap-2 justify-end">
-                            <button
-                              type="button"
-                              className="btn-ghost px-3 py-1.5 text-xs"
-                              onClick={() =>
-                                downloadTextFile(
-                                  fileName,
-                                  JSON.stringify(jsonWithoutMeta ?? {}, null, 2)
-                                )
-                              }
-                            >
-                              Download
-                            </button>
-                            <button
-                              type="button"
-                              className="inline-flex items-center justify-center rounded-lg border border-rose-500/30 px-3 py-1.5 text-xs text-rose-200 transition hover:bg-rose-500/10"
-                              onClick={() => {
-                                const ok = window.confirm(
-                                  `Delete "${fileName}" from this folder?`
-                                );
-                                if (ok) handleDeleteWorkflow(w.id);
-                              }}
-                            >
-                              Delete
-                            </button>
-                          </div>
+                        {/* Action Buttons (The Unified Option) */}
+                        <div className="p-3 grid grid-cols-2 gap-2 bg-slate-950/40">
+                           <button 
+                             onClick={() => setEditingId(wf.id)}
+                             className="flex flex-col items-center justify-center p-4 bg-slate-900 hover:bg-primary group/btn rounded-xl border border-slate-800 transition-all shadow-lg hover:shadow-primary/20"
+                           >
+                              <span className="text-lg group-hover/btn:scale-110 group-hover/btn:rotate-12 transition-all">🏗️</span>
+                              <span className="text-[10px] font-black uppercase tracking-widest mt-2 text-slate-400 group-hover/btn:text-slate-900">Visual Edit</span>
+                           </button>
+                           <button 
+                             onClick={() => setViewingJson(wf)}
+                             className="flex flex-col items-center justify-center p-4 bg-slate-900 hover:bg-slate-800 group/btn rounded-xl border border-slate-800 transition-all hover:border-slate-500"
+                           >
+                              <span className="text-lg group-hover/btn:scale-110 transition-all">📄</span>
+                              <span className="text-[10px] font-black uppercase tracking-widest mt-2 text-slate-400 group-hover/btn:text-slate-200">Raw JSON</span>
+                           </button>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+                     </div>
+                  ))}
+               </div>
+            )}
+         </div>
+      </main>
 
-      {/* Viewer modal */}
-      {viewer ? (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-4xl rounded-2xl border border-slate-800 bg-slate-950/90 shadow-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-800 flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-sm text-slate-400">Workflow</p>
-                <p className="text-lg font-semibold text-slate-100 truncate">
-                  {viewer.name || "Unnamed workflow"}
-                </p>
-                <p className="text-xs text-slate-500 font-mono truncate">
-                  {getFileNameFromJson(viewer.json_data)}
-                </p>
+      {/* Unified JSON Previewer */}
+      {viewingJson && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-3xl animate-in fade-in duration-300">
+           <div className="w-full max-w-6xl h-[85vh] bg-slate-950 border border-slate-800 rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden ring-1 ring-white/10">
+              <div className="p-8 border-b border-slate-900 flex items-center justify-between bg-slate-900/20">
+                 <div>
+                    <h3 className="text-xl font-black text-slate-100 tracking-tighter uppercase">{viewingJson.name}</h3>
+                    <p className="text-[10px] text-slate-500 font-black tracking-widest uppercase mt-1">Source Logic & Metadata</p>
+                 </div>
+                 <button onClick={() => setViewingJson(null)} className="px-6 py-2.5 bg-slate-900 border border-slate-800 rounded-xl font-black hover:bg-slate-800 transition-all uppercase text-[10px] tracking-widest tracking-widest text-slate-400 hover:text-slate-100">✕ CLOSE</button>
               </div>
-              <button
-                type="button"
-                className="btn-ghost px-3 py-1.5 text-xs"
-                onClick={() => setViewer(null)}
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="p-5 space-y-4">
-              <div className="inline-flex rounded-lg bg-slate-900/70 border border-slate-800 text-xs overflow-hidden">
-                <button
-                  type="button"
-                  className={`px-4 py-2 border-r border-slate-800 ${
-                    viewerTab === "json"
-                      ? "bg-slate-800 text-slate-100"
-                      : "text-slate-400 hover:text-slate-100"
-                  }`}
-                  onClick={() => setViewerTab("json")}
-                >
-                  JSON View
-                </button>
-                <button
-                  type="button"
-                  className={`px-4 py-2 ${
-                    viewerTab === "visual"
-                      ? "bg-slate-800 text-slate-100"
-                      : "text-slate-400 hover:text-slate-100"
-                  }`}
-                  onClick={() => setViewerTab("visual")}
-                >
-                  Visual View
-                </button>
-              </div>
-
-              {viewerTab === "json" ? (
-                <pre className="rounded-xl border border-slate-800 bg-slate-950/70 max-h-[65vh] overflow-auto text-xs font-mono text-slate-100 px-4 py-3 whitespace-pre-wrap break-words">
-                  {safePrettyJson(stripN8nMeta(viewer.json_data ?? {}))}
-                </pre>
-              ) : (
-                <div>
-                  {viewer.json_data ? (
-                    <WorkflowReactFlowView workflowJson={stripN8nMeta(viewer.json_data)} />
-                  ) : (
-                    <div className="text-sm text-slate-500 p-6">
-                      Visual view not available.
+              
+              <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_400px] overflow-hidden">
+                 {/* Visual Preview (Read Only) */}
+                 <div className="border-r border-slate-900 bg-slate-950 p-6">
+                    <div className="h-full rounded-2xl border border-slate-800/50 bg-slate-900/10 overflow-hidden">
+                       <WorkflowReactFlowView workflowJson={viewingJson.json_data || {}} />
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
+                 </div>
+
+                 {/* JSON Code Area */}
+                 <div className="flex flex-col bg-slate-950/50 overflow-hidden">
+                    <div className="p-4 border-b border-slate-900 flex items-center justify-between">
+                       <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-2">Raw Application Logic</span>
+                       <button 
+                         onClick={() => {
+                            const blob = new Blob([JSON.stringify(viewingJson.json_data || {}, null, 2)], { type: 'application/json' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `${viewingJson.name}.json`;
+                            a.click();
+                         }}
+                         className="text-[9px] font-black text-primary hover:underline uppercase tracking-widest px-2"
+                       >
+                          Download Script
+                       </button>
+                    </div>
+                    <pre className="flex-1 p-8 text-[11px] font-mono text-slate-400 overflow-auto custom-scrollbar leading-relaxed">
+                       {JSON.stringify(viewingJson.json_data || {}, null, 2)}
+                    </pre>
+                 </div>
+              </div>
+           </div>
         </div>
-      ) : null}
+      )}
     </div>
   );
 };

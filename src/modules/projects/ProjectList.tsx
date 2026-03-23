@@ -124,21 +124,35 @@ const ProjectList = ({
                     className="h-4 w-4 accent-primary"
                     aria-label={`Select ${project.name}`}
                   />
-                  <button
-                    className="flex-1 text-left outline-none"
-                    onClick={() => handleClick(project)}
-                    title="Single click to edit. Double click to open full view."
-                  >
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <p className={`font-medium truncate text-sm ${isSelected ? "text-primary" : "text-slate-200"}`}>
-                        {project.name}
-                      </p>
-                      <StatusBadge status={project.status} />
-                    </div>
-                    {project.description ? (
-                      <p className="text-xs text-slate-400 truncate leading-relaxed">{project.description}</p>
-                    ) : null}
-                  </button>
+                  <div className="flex-1 flex items-center justify-between gap-3 min-w-0">
+                    <button
+                      className="flex-1 text-left outline-none min-w-0"
+                      onClick={() => handleClick(project)}
+                      title="Single click to edit. Double click to open full view."
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className={`font-medium truncate text-sm ${isSelected ? "text-primary" : "text-slate-200"}`}>
+                          {project.name}
+                        </p>
+                        <StatusBadge status={project.status} />
+                      </div>
+                      {project.description ? (
+                        <p className="text-xs text-slate-400 truncate leading-relaxed">{project.description}</p>
+                      ) : (
+                        <p className="text-[10px] text-slate-600 italic">No description</p>
+                      )}
+                    </button>
+
+                    <button
+                      className="btn-ghost p-2 text-[10px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all hover:bg-primary/20 hover:text-primary whitespace-nowrap bg-slate-900/50 border border-slate-800 rounded-lg shadow-lg"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/projects/${project.id}`);
+                      }}
+                    >
+                      Open ➔
+                    </button>
+                  </div>
                 </div>
               );
             })

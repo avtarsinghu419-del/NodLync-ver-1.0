@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Milestone } from "../../../api/projectManagerApi";
+import type { Milestone } from "../../../api/milestonesApi";
 import BulkDeleteBar from "../../../components/BulkDeleteBar";
 import IndeterminateCheckbox from "../../../components/IndeterminateCheckbox";
 import PaginationControls from "../../../components/PaginationControls";
@@ -70,7 +70,9 @@ const MilestonesCard = ({ milestones, onAdd, onToggle, onDelete, onBulkDelete, b
           <h3 className="font-semibold text-slate-200 text-sm">Strategic Milestones</h3>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">{completedCount}/{milestones.length} Done</span>
+          {milestones.length > 0 && (
+            <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">{completedCount}/{milestones.length} Done</span>
+          )}
           <button className="text-xs text-primary hover:text-primary/80 transition font-bold" onClick={() => setAdding((v) => !v)}>
             {adding ? "CANCEL" : "+ ADD"}
           </button>
@@ -112,8 +114,20 @@ const MilestonesCard = ({ milestones, onAdd, onToggle, onDelete, onBulkDelete, b
       />
 
       {milestones.length === 0 ? (
-        <div className="text-center py-6 border border-dashed border-slate-800 rounded-xl">
-          <p className="text-xs text-slate-600">No milestones defined for this project.</p>
+        <div className="py-12 flex flex-col items-center justify-center text-center space-y-4 border border-dashed border-slate-800 rounded-2xl bg-slate-900/10">
+           <span className="text-3xl opacity-20">🎯</span>
+           <div className="space-y-1">
+              <p className="text-sm font-semibold text-slate-400">No Milestones Found</p>
+              <p className="text-xs text-slate-600">Break down your project into strategic goals.</p>
+           </div>
+           {!adding && (
+              <button 
+                onClick={() => setAdding(true)}
+                className="btn-primary text-xs py-2 px-6"
+              >
+                 Create your first milestone
+              </button>
+           )}
         </div>
       ) : (
         <div className="space-y-3">
@@ -151,9 +165,7 @@ const MilestonesCard = ({ milestones, onAdd, onToggle, onDelete, onBulkDelete, b
                     onClick={() => onDelete(m.id)} 
                     title="Delete Milestone"
                   >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
+                    🗑️
                   </button>
                   <button
                     className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center transition border ${isCompleted ? "bg-emerald-500/10 border-emerald-500 text-emerald-500" : "bg-slate-900 border-slate-700 text-slate-600 hover:border-primary"} ${isLoading ? "opacity-50" : ""}`}
@@ -207,4 +219,3 @@ const MilestonesCard = ({ milestones, onAdd, onToggle, onDelete, onBulkDelete, b
 };
 
 export default MilestonesCard;
-

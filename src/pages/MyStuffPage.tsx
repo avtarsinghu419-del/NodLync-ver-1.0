@@ -1,31 +1,33 @@
 import { useEffect, useState } from "react";
 import useAppStore from "../store/useAppStore";
-import {
-  getCategories,
-  createCategory,
-  deleteCategory,
-  getItems,
-  createItem,
-  deleteItem,
-  type MyStuffCategory,
-  type MyStuffItem,
-} from "../api/myStuffApi";
+import { type MyStuffCategory, type MyStuffItem } from "../api/myStuffApi";
 import BulkDeleteBar from "../components/BulkDeleteBar";
-import IndeterminateCheckbox from "../components/IndeterminateCheckbox";
 import InlineSpinner from "../components/InlineSpinner";
 import PaginationControls from "../components/PaginationControls";
 import { useBulkSelection } from "../hooks/useBulkSelection";
 import { usePagination } from "../hooks/usePagination";
+import ModuleHeader from "../components/ModuleHeader";
+import { useMyStuff } from "../hooks/useMyStuff";
 
 const MyStuffPage = () => {
   const user = useAppStore((s) => s.user);
-  const [categories, setCategories] = useState<MyStuffCategory[]>([]);
-  const [items, setItems] = useState<MyStuffItem[]>([]);
+  const { 
+    categories, 
+    loadingCategories, 
+    addCategory, 
+    deleteCategory: deleteCatHook, 
+    getItemsQuery,
+    addItem: addItemHook,
+    deleteItem: deleteItemHook
+  } = useMyStuff(user?.id);
+
   const [selectedCategory, setSelectedCategory] = useState<MyStuffCategory | null>(null);
-  const [loadingCats, setLoadingCats] = useState(true);
-  const [loadingItems, setLoadingItems] = useState(false);
-  const [newCatName, setNewCatName] = useState("");
+  const { data: items = [], isLoading: loadingItems } = getItemsQuery(selectedCategory?.id);
+
+  const [showCatForm, setShowCatForm] = useState(false);
+  const [catName, setCatName] = useState("");
   const [catAdding, setCatAdding] = useState(false);
+
   const [showItemForm, setShowItemForm] = useState(false);
   const [itemAdding, setItemAdding] = useState(false);
   const [deletingCategories, setDeletingCategories] = useState(false);
@@ -34,354 +36,246 @@ const MyStuffPage = () => {
 
   const categoriesPagination = usePagination(categories);
   const itemsPagination = usePagination(items);
-  const categorySelection = useBulkSelection(categories, (category) => category.id);
-  const itemSelection = useBulkSelection(items, (item) => item.id);
-  const categoryPageState = categorySelection.getPageState(categoriesPagination.paginatedItems);
-  const itemPageState = itemSelection.getPageState(itemsPagination.paginatedItems);
+  const categorySelection = useBulkSelection(categories, (category: MyStuffCategory) => category.id);
+  const itemSelection = useBulkSelection(items, (item: MyStuffItem) => item.id);
 
   useEffect(() => {
-    if (!user) return;
-    const fetchCats = async () => {
-      setLoadingCats(true);
-      const { data } = await getCategories(user.id);
-      setCategories(data);
-      if (data.length > 0) setSelectedCategory(data[0]);
-      setLoadingCats(false);
-    };
-    fetchCats();
-  }, [user]);
-
-  useEffect(() => {
-    if (!selectedCategory) {
-      setItems([]);
-      return;
+    if (categories.length > 0 && !selectedCategory) {
+      setSelectedCategory(categories[0]);
     }
-    const fetchCatItems = async () => {
-      setLoadingItems(true);
-      const { data } = await getItems(selectedCategory.id);
-      setItems(data);
-      itemsPagination.setCurrentPage(1);
-      itemSelection.clearSelection();
-      setLoadingItems(false);
-    };
-    fetchCatItems();
-  }, [selectedCategory]);
+  }, [categories, selectedCategory]);
 
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCatName.trim() || !user) return;
+    if (!catName.trim()) return;
     setCatAdding(true);
-    const { data } = await createCategory({ user_id: user.id, name: newCatName.trim() });
-    if (data) {
-      setCategories((prev) => [...prev, data]);
-      setNewCatName("");
-      if (!selectedCategory) setSelectedCategory(data);
-      categoriesPagination.setCurrentPage(1);
+    try {
+      const res = await addCategory(catName);
+      if (res.data) {
+        setSelectedCategory(res.data);
+        setCatName("");
+        setShowCatForm(false);
+      }
+    } catch {
+       alert("Failed to add category.");
+    } finally {
+      setCatAdding(false);
     }
-    setCatAdding(false);
-  };
-
-  const handleDeleteCategory = async (id: string, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (!window.confirm("Delete this category? All items inside will be lost.")) return;
-    await deleteCategory(id);
-    setCategories((prev) => prev.filter((c) => c.id !== id));
-    if (selectedCategory?.id === id) setSelectedCategory(null);
-    categorySelection.clearSelection();
-  };
-
-  const handleDeleteSelectedCategories = async () => {
-    if (categorySelection.selectedCount === 0) return;
-    if (!window.confirm(`Delete ${categorySelection.selectedCount} selected category(s)? All items inside will be lost.`)) return;
-    setDeletingCategories(true);
-    const ids = Array.from(categorySelection.selectedIds);
-    await Promise.all(ids.map((id) => deleteCategory(id)));
-    setCategories((prev) => prev.filter((category) => !categorySelection.selectedIds.has(category.id)));
-    if (selectedCategory && categorySelection.selectedIds.has(selectedCategory.id)) {
-      const remaining = categories.filter((category) => !categorySelection.selectedIds.has(category.id));
-      setSelectedCategory(remaining[0] ?? null);
-    }
-    categorySelection.clearSelection();
-    setDeletingCategories(false);
   };
 
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCategory || !user || !itemForm.title.trim()) return;
+    if (!selectedCategory || !itemForm.title.trim()) return;
     setItemAdding(true);
-    const { data } = await createItem({
-      user_id: user.id,
-      category_id: selectedCategory.id,
-      title: itemForm.title.trim(),
-      url: itemForm.url.trim(),
-      description: itemForm.description.trim(),
-    });
-    if (data) {
-      setItems((prev) => [data, ...prev]);
+    try {
+      await addItemHook({
+        categoryId: selectedCategory.id,
+        ...itemForm,
+      });
       setItemForm({ title: "", url: "", description: "" });
       setShowItemForm(false);
-      itemsPagination.setCurrentPage(1);
+    } catch {
+       alert("Failed to add item.");
+    } finally {
+      setItemAdding(false);
     }
-    setItemAdding(false);
   };
 
-  const handleDeleteItem = async (id: string) => {
-    if (!window.confirm("Remove this item?")) return;
-    await deleteItem(id);
-    setItems((prev) => prev.filter((i) => i.id !== id));
-    itemSelection.clearSelection();
+  const handleDeleteCategory = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm("Delete category and ALL items?")) return;
+    try {
+      await deleteCatHook(id);
+      if (selectedCategory?.id === id) setSelectedCategory(null);
+    } catch {
+       alert("Failed to delete category.");
+    }
   };
 
-  const handleDeleteSelectedItems = async () => {
-    if (itemSelection.selectedCount === 0) return;
-    if (!window.confirm(`Delete ${itemSelection.selectedCount} selected item(s)?`)) return;
+  const handleDeleteItem = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm("Delete this bookmark?")) return;
+    if (!selectedCategory) return;
+    try {
+      await deleteItemHook({ id, categoryId: selectedCategory.id });
+    } catch {
+       alert("Failed to delete item.");
+    }
+  };
+
+  const handleBulkDeleteCategories = async () => {
+    if (!window.confirm(`Delete ${categorySelection.selectedCount} categories?`)) return;
+    setDeletingCategories(true);
+    try {
+      await Promise.all(Array.from(categorySelection.selectedIds).map((id) => deleteCatHook(id)));
+      categorySelection.clearSelection();
+      setSelectedCategory(null);
+    } finally {
+      setDeletingCategories(false);
+    }
+  };
+
+  const handleBulkDeleteItems = async () => {
+    if (!selectedCategory || !window.confirm(`Delete ${itemSelection.selectedCount} items?`)) return;
     setDeletingItems(true);
-    await Promise.all(Array.from(itemSelection.selectedIds).map((id) => deleteItem(id)));
-    setItems((prev) => prev.filter((item) => !itemSelection.selectedIds.has(item.id)));
-    itemSelection.clearSelection();
-    setDeletingItems(false);
-  };
-
-  const launchUrl = (url: string) => {
-    let finalUrl = url;
-    if (!url.startsWith("http://") && !url.startsWith("https://")) finalUrl = `https://${url}`;
-    window.open(finalUrl, "_blank", "noopener,noreferrer");
+    try {
+      const ids = Array.from(itemSelection.selectedIds);
+      await Promise.all(ids.map((id) => deleteItemHook({ id, categoryId: selectedCategory.id })));
+      itemSelection.clearSelection();
+    } finally {
+      setDeletingItems(false);
+    }
   };
 
   return (
-    <div className="h-[calc(100vh-theme(spacing.16))] flex flex-col xl:flex-row gap-6">
-      <div className="xl:w-80 flex flex-col gap-4">
-        <div className="flex items-center gap-2 px-1">
-          <span className="text-xl">Folder</span>
-          <h2 className="text-lg font-bold text-slate-100 uppercase tracking-widest">My Stuff</h2>
-        </div>
+    <div className="h-[calc(100vh-theme(spacing.16))] flex flex-col lg:flex-row gap-6">
+      {/* Categories Sidebar */}
+      <div className="w-full lg:w-72 flex flex-col bg-slate-900/40 rounded-2xl border border-slate-800 overflow-hidden backdrop-blur-sm shrink-0">
+        <ModuleHeader
+          title="Categories"
+          description="SORT YOUR RESOURCES"
+          icon="📂"
+        >
+          <button
+            onClick={() => setShowCatForm(true)}
+            className="p-2 hover:bg-slate-700/50 rounded-lg text-slate-300 transition-colors"
+          >
+            +
+          </button>
+        </ModuleHeader>
 
-        <div className="glass-panel flex-1 flex flex-col overflow-hidden">
-          <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-            <h3 className="font-semibold text-slate-300">Categories</h3>
-            <span className="text-xs text-slate-500">{categories.length}</span>
-          </div>
-
-          <div className="p-3 pb-0">
-            <BulkDeleteBar
-              count={categorySelection.selectedCount}
-              label="categories"
-              onDelete={handleDeleteSelectedCategories}
-              onClear={categorySelection.clearSelection}
-              busy={deletingCategories}
-            />
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-2 space-y-1 mt-2">
-            {loadingCats ? (
-              <div className="p-4 text-center"><InlineSpinner /></div>
-            ) : categories.length === 0 ? (
-              <div className="p-4 text-center text-xs text-slate-500 italic">No categories. Create one below!</div>
-            ) : (
-              <>
-                <div className="flex items-center justify-between gap-3 px-2 py-2 text-sm text-slate-400">
-                  <div className="flex items-center gap-3">
-                    <IndeterminateCheckbox
-                      checked={categoryPageState.checked}
-                      indeterminate={categoryPageState.indeterminate}
-                      onChange={() => categorySelection.togglePage(categoriesPagination.paginatedItems)}
-                      ariaLabel="Select all visible categories"
-                    />
-                    <span>Select visible categories</span>
-                  </div>
-                </div>
-                {categoriesPagination.paginatedItems.map((c) => {
-                  const isSelectedCategory = selectedCategory?.id === c.id;
-                  return (
-                    <div
-                      key={c.id}
-                      onClick={() => setSelectedCategory(c)}
-                      className={`group flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition ${
-                        isSelectedCategory ? "bg-primary/20 text-primary border border-primary/30" : "text-slate-300 hover:bg-slate-800 border border-transparent"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={categorySelection.isSelected(c.id)}
-                        onChange={() => categorySelection.toggleOne(c.id)}
-                        onClick={(event) => event.stopPropagation()}
-                        className="h-4 w-4 accent-primary"
-                        aria-label={`Select ${c.name}`}
-                      />
-                      <span className="font-medium truncate pr-2 flex-1">{c.name}</span>
-                      <button
-                        onClick={(e) => handleDeleteCategory(c.id, e)}
-                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 transition"
-                        title="Delete Category"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  );
-                })}
-              </>
-            )}
-          </div>
-
-          {categories.length > 0 ? (
-            <PaginationControls
-              currentPage={categoriesPagination.currentPage}
-              pageSize={categoriesPagination.pageSize}
-              totalItems={categoriesPagination.totalItems}
-              totalPages={categoriesPagination.totalPages}
-              startItem={categoriesPagination.startItem}
-              endItem={categoriesPagination.endItem}
-              onPageChange={categoriesPagination.setCurrentPage}
-              onPageSizeChange={categoriesPagination.setPageSize}
-              itemLabel="categories"
-            />
-          ) : null}
-
-          <form onSubmit={handleAddCategory} className="p-3 border-t border-slate-800 bg-slate-900/50 flex gap-2">
-            <input
-              className="flex-1 bg-surface border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-slate-600"
-              placeholder="New category..."
-              value={newCatName}
-              onChange={(e) => setNewCatName(e.target.value)}
-              disabled={catAdding}
-            />
-            <button type="submit" disabled={!newCatName.trim() || catAdding} className="btn-primary px-3 py-1.5 text-sm">
-              Add
-            </button>
-          </form>
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {loadingCategories ? (
+            <div className="py-12 flex justify-center"><InlineSpinner /></div>
+          ) : (
+            <>
+               <BulkDeleteBar 
+                 count={categorySelection.selectedCount} 
+                 label="categories"
+                 onDelete={handleBulkDeleteCategories} 
+                 onClear={categorySelection.clearSelection}
+                 busy={deletingCategories}
+               />
+               {categoriesPagination.paginatedItems.map((cat) => (
+                 <div
+                   key={cat.id}
+                   onClick={() => setSelectedCategory(cat)}
+                   className={`group flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all border ${selectedCategory?.id === cat.id ? "bg-primary border-primary text-slate-900" : "bg-slate-800/20 border-slate-700/50 text-slate-400 hover:border-slate-600"}`}
+                 >
+                   <div className="flex items-center gap-3">
+                     <input
+                       type="checkbox"
+                       checked={categorySelection.isSelected(cat.id)}
+                       onChange={() => categorySelection.toggleOne(cat.id)}
+                       onClick={(e) => e.stopPropagation()}
+                       className={`rounded border-slate-700 bg-slate-900 text-slate-900 focus:ring-slate-900/10 ${selectedCategory?.id === cat.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+                     />
+                     <span className="text-sm font-semibold truncate">{cat.name}</span>
+                   </div>
+                   <button
+                     onClick={(e) => handleDeleteCategory(cat.id, e)}
+                     className={`text-xs opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-slate-900/20 rounded ${selectedCategory?.id === cat.id ? "text-slate-900" : "text-rose-400"}`}
+                   >
+                     🗑️
+                   </button>
+                 </div>
+               ))}
+               <PaginationControls
+                  currentPage={categoriesPagination.currentPage}
+                  pageSize={categoriesPagination.pageSize}
+                  totalItems={categoriesPagination.totalItems}
+                  totalPages={categoriesPagination.totalPages}
+                  startItem={categoriesPagination.startItem}
+                  endItem={categoriesPagination.endItem}
+                  onPageChange={categoriesPagination.setCurrentPage}
+                  onPageSizeChange={categoriesPagination.setPageSize}
+                  itemLabel="cats"
+               />
+            </>
+          )}
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col min-h-0">
-        {!selectedCategory ? (
-          <div className="flex-1 glass-panel flex flex-col items-center justify-center p-8 text-center">
-            <span className="text-6xl mb-4 opacity-50">Card</span>
-            <p className="text-lg font-medium text-slate-300">No Category Selected</p>
-            <p className="text-sm text-slate-500 mt-2">Select a category on the left, or create a new one to store your links and notes.</p>
-          </div>
-        ) : (
-          <div className="flex-1 flex flex-col gap-4 min-h-0">
-            <div className="glass-panel p-5 flex items-center justify-between shrink-0">
-              <div>
-                <h2 className="text-2xl font-bold text-slate-100">{selectedCategory.name}</h2>
-                <p className="text-sm text-slate-400 mt-1">Manage your saved tools, websites, and resources.</p>
-              </div>
-              <button className="btn-primary flex items-center gap-2" onClick={() => setShowItemForm(!showItemForm)}>
-                <span>{showItemForm ? "Cancel" : "Add New Stuff"}</span>
-              </button>
+      {/* Main Content Areas */}
+      <div className="flex-1 flex flex-col bg-surface rounded-2xl border border-slate-800 shadow-2xl overflow-hidden min-h-0">
+        <ModuleHeader
+          title={selectedCategory?.name || "My Stuff"}
+          description="ALL YOUR LINKS AND RESOURCES IN ONE PLACE"
+          icon="⭐"
+        >
+          {selectedCategory && (
+            <button
+              onClick={() => setShowItemForm(true)}
+              className="btn-primary py-2 px-4 text-xs font-bold"
+            >
+              Add Shortcut
+            </button>
+          )}
+        </ModuleHeader>
+
+        <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
+          {!selectedCategory ? (
+            <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-4">
+              <span className="text-4xl text-slate-700">📚</span>
+              <p className="text-sm font-medium">Select a category to see your bookmarks.</p>
             </div>
-
-            {showItemForm ? (
-              <form onSubmit={handleAddItem} className="glass-panel p-5 shrink-0 bg-primary/5 border-primary/20 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <label className="block space-y-1">
-                    <span className="text-sm text-slate-300">Title <span className="text-rose-500">*</span></span>
-                    <input
-                      className="w-full bg-surface border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary"
-                      placeholder="e.g. ChatGPT, Node.js Docs..."
-                      required
-                      value={itemForm.title}
-                      onChange={(e) => setItemForm({ ...itemForm, title: e.target.value })}
-                    />
-                  </label>
-                  <label className="block space-y-1">
-                    <span className="text-sm text-slate-300">URL / Link</span>
-                    <input
-                      className="w-full bg-surface border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary font-mono text-xs"
-                      placeholder="chatgpt.com"
-                      value={itemForm.url}
-                      onChange={(e) => setItemForm({ ...itemForm, url: e.target.value })}
-                    />
-                  </label>
-                </div>
-                <label className="block space-y-1">
-                  <span className="text-sm text-slate-300">Description / Notes</span>
-                  <textarea
-                    rows={2}
-                    className="w-full bg-surface border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary resize-none"
-                    placeholder="Brief note about this resource..."
-                    value={itemForm.description}
-                    onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })}
-                  />
-                </label>
-                <div className="flex justify-end gap-3 pt-2">
-                  <button type="button" onClick={() => setShowItemForm(false)} className="btn-ghost text-sm">Cancel</button>
-                  <button type="submit" disabled={!itemForm.title.trim() || itemAdding} className="btn-primary text-sm min-w-[100px]">
-                    {itemAdding ? "Saving..." : "Save Item"}
-                  </button>
-                </div>
-              </form>
-            ) : null}
-
-            <div className="glass-panel p-5 space-y-4 overflow-y-auto">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <IndeterminateCheckbox
-                    checked={itemPageState.checked}
-                    indeterminate={itemPageState.indeterminate}
-                    onChange={() => itemSelection.togglePage(itemsPagination.paginatedItems)}
-                    ariaLabel="Select all visible items"
-                  />
-                  <p className="text-sm text-slate-400">Select visible items</p>
-                </div>
-                <span className="text-xs text-slate-500">{items.length} total</span>
-              </div>
-
-              <BulkDeleteBar
-                count={itemSelection.selectedCount}
-                label="items"
-                onDelete={handleDeleteSelectedItems}
-                onClear={itemSelection.clearSelection}
-                busy={deletingItems}
+          ) : loadingItems && items.length === 0 ? (
+            <div className="h-full flex items-center justify-center"><InlineSpinner /></div>
+          ) : (
+            <div className="space-y-6">
+              <BulkDeleteBar 
+                 count={itemSelection.selectedCount} 
+                 label="items"
+                 onDelete={handleBulkDeleteItems} 
+                 onClear={itemSelection.clearSelection}
+                 busy={deletingItems}
               />
 
-              {loadingItems ? (
-                <div className="flex justify-center p-8"><InlineSpinner /></div>
-              ) : items.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-12 text-center h-full">
-                  <span className="text-4xl mb-3 opacity-30">Note</span>
-                  <p className="text-slate-400">This category is empty.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {itemsPagination.paginatedItems.map((item) => {
-                    const hasUrl = !!item.url?.trim();
-                    return (
-                      <div key={item.id} className="bg-surface border border-slate-800 rounded-xl p-4 flex flex-col gap-3 group relative transition hover:border-slate-600 hover:shadow-lg">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-start gap-3 flex-1 min-w-0">
-                            <input
-                              type="checkbox"
-                              checked={itemSelection.isSelected(item.id)}
-                              onChange={() => itemSelection.toggleOne(item.id)}
-                              className="h-4 w-4 accent-primary mt-1"
-                              aria-label={`Select ${item.title}`}
-                            />
-                            <h3 className="font-bold text-slate-200 line-clamp-1 flex-1" title={item.title}>{item.title}</h3>
-                          </div>
-                          <button className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-rose-400 transition" onClick={() => handleDeleteItem(item.id)} title="Delete">
-                            ×
-                          </button>
-                        </div>
-                        <p className="text-xs text-slate-400 line-clamp-2 flex-1 min-h-[2rem]">{item.description || "No description provided."}</p>
-                        {hasUrl ? (
-                          <div className="pt-3 border-t border-slate-800 mt-auto flex items-center justify-between gap-2">
-                            <span className="text-[10px] font-mono text-slate-500 truncate flex-1" title={item.url}>{item.url}</span>
-                            <button onClick={() => launchUrl(item.url as string)} className="text-xs bg-primary/10 text-primary hover:bg-primary/20 px-3 py-1.5 rounded-md font-semibold transition shrink-0 flex items-center gap-1.5">
-                              <span>Launch</span>
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                 {itemsPagination.paginatedItems.map((item) => (
+                   <div
+                     key={item.id}
+                     className="group glass-panel-light p-5 hover:border-primary/30 transition-all border border-slate-800/50 bg-slate-800/10 relative overflow-hidden"
+                   >
+                     <div className="flex items-start justify-between">
+                       <input
+                         type="checkbox"
+                         checked={itemSelection.isSelected(item.id)}
+                         onChange={() => itemSelection.toggleOne(item.id)}
+                         className="rounded border-slate-700 bg-slate-900 text-primary focus:ring-primary/20"
+                       />
+                       <button
+                         onClick={(e) => handleDeleteItem(item.id, e)}
+                         className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-600 hover:text-rose-400 p-1.5"
+                       >
+                         🗑️
+                       </button>
+                     </div>
+                     <a
+                       href={item.url ? (item.url.startsWith("http") ? item.url : `https://${item.url}`) : "#"}
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       className="block mt-4"
+                     >
+                       <h4 className="text-slate-100 font-bold truncate text-sm group-hover:text-primary transition-colors">{item.title}</h4>
+                       <p className="text-xxs text-slate-500 mt-1 truncate font-mono">{item.url || "no-url"}</p>
+                       <p className="text-xs text-slate-400 mt-3 line-clamp-2 leading-relaxed">{item.description || "No description provided."}</p>
+                     </a>
+                     
+                     <div className="mt-4 flex justify-end">
+                       <span className="text-[10px] text-slate-600 uppercase tracking-tighter">View Source ➔</span>
+                     </div>
+                   </div>
+                 ))}
+              </div>
 
-            {items.length > 0 ? (
-              <div className="glass-panel">
-                <PaginationControls
+               {items.length === 0 && (
+                 <div className="py-24 text-center border border-dashed border-slate-800 rounded-3xl bg-slate-900/20">
+                    <p className="text-slate-500 text-sm">No shortcuts in this category yet.</p>
+                 </div>
+               )}
+
+               <PaginationControls
                   currentPage={itemsPagination.currentPage}
                   pageSize={itemsPagination.pageSize}
                   totalItems={itemsPagination.totalItems}
@@ -390,16 +284,94 @@ const MyStuffPage = () => {
                   endItem={itemsPagination.endItem}
                   onPageChange={itemsPagination.setCurrentPage}
                   onPageSizeChange={itemsPagination.setPageSize}
-                  itemLabel="items"
-                />
-              </div>
-            ) : null}
-          </div>
-        )}
+                  itemLabel="bookmarks"
+               />
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Modals */}
+      {showCatForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="w-full max-w-md glass-panel p-8 shadow-2xl relative">
+             <button onClick={() => setShowCatForm(false)} className="absolute top-4 right-4 text-slate-500 hover:text-slate-300">×</button>
+             <h3 className="text-xl font-bold text-slate-100 mb-6">New Category</h3>
+             <form onSubmit={handleAddCategory} className="space-y-6">
+                <input
+                  autoFocus
+                  required
+                  placeholder="Category Name..."
+                  value={catName}
+                  onChange={(e) => setCatName(e.target.value)}
+                  className="w-full rounded-xl bg-slate-900 border border-slate-700 px-5 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-slate-100"
+                />
+                <button
+                  type="submit"
+                  disabled={catAdding}
+                  className="w-full py-4 rounded-xl bg-primary text-slate-900 font-bold hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
+                >
+                  {catAdding ? "Adding..." : "Create Category"}
+                </button>
+             </form>
+          </div>
+        </div>
+      )}
+
+      {showItemForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="w-full max-w-lg glass-panel p-8 shadow-2xl relative">
+             <button onClick={() => setShowItemForm(false)} className="absolute top-4 right-4 text-slate-500 hover:text-slate-300">×</button>
+             <h3 className="text-xl font-bold text-slate-100 mb-6 flex items-center gap-2">
+                <span>➕ New Shortcut</span>
+                <span className="text-xxs px-2 py-1 bg-primary/10 text-primary rounded-full uppercase tracking-tighter">to {selectedCategory?.name}</span>
+             </h3>
+             <form onSubmit={handleAddItem} className="space-y-5">
+                <div className="space-y-1.5">
+                   <label className="text-xxs uppercase tracking-widest text-slate-500 font-bold ml-1">Label</label>
+                   <input
+                    required
+                    placeholder="Short title..."
+                    value={itemForm.title}
+                    onChange={(e) => setItemForm({ ...itemForm, title: e.target.value })}
+                    className="w-full rounded-xl bg-slate-900 border border-slate-700 px-5 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-slate-100"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                   <label className="text-xxs uppercase tracking-widest text-slate-500 font-bold ml-1">Web Address</label>
+                   <input
+                    required
+                    placeholder="https://quixly.app"
+                    value={itemForm.url}
+                    onChange={(e) => setItemForm({ ...itemForm, url: e.target.value })}
+                    className="w-full rounded-xl bg-slate-900 border border-slate-700 px-5 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-slate-100 font-mono"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                   <label className="text-xxs uppercase tracking-widest text-slate-500 font-bold ml-1">Short Context</label>
+                   <textarea
+                    placeholder="Why this matters..."
+                    rows={3}
+                    value={itemForm.description}
+                    onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })}
+                    className="w-full rounded-xl bg-slate-900 border border-slate-700 px-5 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-slate-100 resize-none"
+                  />
+                </div>
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={itemAdding}
+                    className="w-full py-4 rounded-xl bg-primary text-slate-900 font-bold hover:shadow-lg shadow-primary/20 transition-all disabled:opacity-50"
+                  >
+                    {itemAdding ? "Saving..." : "Save Benchmark"}
+                  </button>
+                </div>
+             </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default MyStuffPage;
-

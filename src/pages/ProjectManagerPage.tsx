@@ -1,38 +1,23 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { getProjects } from "../api/projectsApi";
 import { supabase } from "../api/supabaseClient";
-import {
-  getMilestones,
-  getTaskItems,
-  getProjectLogs,
-  getAllProjectLogs,
-  getProjectLogsPage,
-  getProjectMembers,
-  createMilestone,
-  updateMilestone,
-  deleteMilestone,
-  createTaskItem,
-  updateTaskItem,
-  deleteTaskItem,
-  createProjectLog,
-  createProjectReport,
-  type Milestone,
-  type TaskItem,
-  type ProjectLog,
-  type ProjectMember,
-} from "../api/projectManagerApi";
+import { getMilestones, createMilestone, updateMilestone, deleteMilestone, type Milestone } from "../api/milestonesApi";
+import { getTaskItems, createTaskItem, updateTaskItem, deleteTaskItem, type TaskItem } from "../api/tasksApi";
+import { getProjectLogs, getAllProjectLogs, getProjectLogsPage, createProjectLog, type ProjectLog } from "../api/logsApi";
+import { createProjectReport } from "../api/reportsApi";
 import InlineSpinner from "../components/InlineSpinner";
 import ProjectHeader from "../modules/projects/manager/ProjectHeader";
 import ProjectTabs, { type TabId } from "../modules/projects/manager/ProjectTabs";
 import MilestonesCard from "../modules/projects/manager/MilestonesCard";
 import TasksPanel from "../modules/projects/manager/TasksPanel";
-import TeamCard from "../modules/projects/manager/TeamCard";
+import TeamCard, { type ProjectRole } from "../modules/projects/manager/TeamCard";
 import WorkLogCard from "../modules/projects/manager/WorkLogCard";
 import ReportsCard from "../modules/projects/manager/ReportsCard";
 import useAppStore from "../store/useAppStore";
 import type { Project } from "../types";
 import { formatDateTime } from "../utils/format";
+import { useMembers } from "../hooks/useMembers";
 
 const HistoryList = ({
   project,
@@ -210,6 +195,13 @@ const OverviewTab = ({
   onAddMilestone,
   onUpdateMilestone,
   onDeleteMilestone,
+  members,
+  currentMemberRole,
+  onAddMember,
+  onUpdateMemberRole,
+  onRemoveMember,
+  onSearchUsers,
+  onAddRedirect,
 }: {
   project: Project;
   milestones: Milestone[];
@@ -219,12 +211,21 @@ const OverviewTab = ({
   onAddMilestone: (payload: { title: string; deadline?: string | null }) => Promise<void>;
   onUpdateMilestone: (m: any) => Promise<void>;
   onDeleteMilestone: (id: string) => Promise<void>;
+  members: any[];
+  currentMemberRole: ProjectRole;
+  onAddMember: (uid: string, role: ProjectRole) => Promise<void>;
+  onUpdateMemberRole: (id: string, role: ProjectRole) => Promise<void>;
+  onRemoveMember: (id: string) => Promise<void>;
+  onSearchUsers: (q: string) => Promise<any>;
+  onAddRedirect: () => void;
 }) => {
   const lastCompletedMilestone = [...milestones].reverse().find(m => m.status === 'completed');
   const inProgressMilestone = milestones.find(m => m.status === 'in_progress');
+  const isProjectOwner = userId === project.user_id;
+  const canManage = isProjectOwner || currentMemberRole === 'owner' || currentMemberRole === 'admin';
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[1fr,350px] gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr,350px] gap-6">
       <div className="space-y-6">
         {/* Recent Milestones */}
         <div className="glass-panel p-6">
@@ -294,7 +295,15 @@ const OverviewTab = ({
          onDelete={onDeleteMilestone}
          onBulkDelete={async (ids) => { for(const mid of ids) await onDeleteMilestone(mid); }}
         />
-        <TeamCard members={[]} />
+        <TeamCard 
+           members={members} 
+           canManage={canManage}
+           onAdd={onAddMember}
+           onUpdateRole={onUpdateMemberRole}
+           onRemove={onRemoveMember}
+           onSearch={onSearchUsers}
+           onAddRedirect={onAddRedirect}
+        />
       </div>
     </div>
   );
@@ -308,26 +317,37 @@ const ProjectManagerPage = () => {
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [logs, setLogs] = useState<ProjectLog[]>([]);
-  const [members, setMembers] = useState<ProjectMember[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [loading, setLoading] = useState(true);
-  const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [historyPage, setHistoryPage] = useState(1);
   const [historyPageSize] = useState(10);
   const [historyLogs, setHistoryLogs] = useState<ProjectLog[]>([]);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [historyLoading, setHistoryLoading] = useState(false);
 
+  const {
+    members,
+    addMember,
+    updateRole: updateMemberRole,
+    deleteMember: removeMember,
+    searchUsers: searchUsersApi
+  } = useMembers(id);
+
+  const currentMemberRole = useMemo(() => {
+    const member = members.find(m => m.user_id === user?.id);
+    if (!member && project?.user_id === user?.id) return 'owner';
+    return (member?.role as ProjectRole) || 'viewer';
+  }, [members, user, project]);
+
   const loadAll = useCallback(async () => {
     if (!id || !user) return;
     setLoading(true);
     try {
-      const [pRes, mRes, tRes, lRes, memRes] = await Promise.all([
+      const [pRes, mRes, tRes, lRes] = await Promise.all([
         getProjects(user.id),
         getMilestones(id),
         getTaskItems(id),
         getProjectLogs(id),
-        getProjectMembers(id),
       ]);
 
       const foundProject = (pRes.data as Project[]).find(p => p.id === id);
@@ -335,7 +355,6 @@ const ProjectManagerPage = () => {
       setMilestones(mRes.data || []);
       setTasks(tRes.data || []);
       setLogs(lRes.data || []);
-      setMembers(memRes.data || []);
     } catch (err) {
       console.error("Load failed", err);
     } finally {
@@ -350,15 +369,9 @@ const ProjectManagerPage = () => {
     setHistoryLoading(true);
     try {
       const res = await getProjectLogsPage(id, page, historyPageSize);
-      // eslint-disable-next-line no-console
-      console.log("RESPONSE - project_logs (history page)", res);
-      if (res.error) {
-        // eslint-disable-next-line no-console
-        console.error("ERROR - project_logs (history page)", res.error);
-        throw res.error;
-      }
-      setHistoryLogs(res.data || []);
-      setHistoryTotal(res.count || 0);
+      if (res.error) throw res.error;
+      setHistoryLogs(res.data?.logs || []);
+      setHistoryTotal(res.data?.total || 0);
     } finally {
       setHistoryLoading(false);
     }
@@ -381,38 +394,11 @@ const ProjectManagerPage = () => {
       blockers: payload.blockers,
       notes: payload.notes,
     };
-
-    // Debug logging for diagnostics
-    // eslint-disable-next-line no-console
-    console.log("INSERT PAYLOAD - project_logs", insertPayload);
-
-    const response = await createProjectLog(insertPayload);
-
-    // eslint-disable-next-line no-console
-    console.log("RESPONSE - project_logs", response);
-
-    if ((response as any).error) {
-      // eslint-disable-next-line no-console
-      console.error("ERROR - project_logs", (response as any).error);
-      throw (response as any).error;
-    }
-
+    await createProjectLog(insertPayload);
     const updatedLogs = await getProjectLogs(project.id);
-
-    // eslint-disable-next-line no-console
-    console.log("RESPONSE - project_logs (refetch)", updatedLogs);
-
-    if (updatedLogs.error) {
-      // eslint-disable-next-line no-console
-      console.error("ERROR - project_logs (refetch)", updatedLogs.error);
-      throw updatedLogs.error;
-    }
-
+    if (updatedLogs.error) throw updatedLogs.error;
     setLogs(updatedLogs.data || []);
-
-    if (activeTab === "history") {
-      await loadHistory(historyPage);
-    }
+    if (activeTab === "history") await loadHistory(historyPage);
   };
 
   const handleAddMilestone = async (payload: { title: string; deadline?: string | null }) => {
@@ -428,25 +414,9 @@ const ProjectManagerPage = () => {
   };
 
   const handleUpdateMilestone = async (m: any) => {
-    const updatePayload: Partial<Milestone> = {
-      title: m.title,
-      status: m.status,
-    };
-
-    // eslint-disable-next-line no-console
-    console.log("UPDATE PAYLOAD - milestones", { id: m.id, payload: updatePayload });
-
+    const updatePayload: Partial<Milestone> = { title: m.title, status: m.status };
     const response = await updateMilestone(m.id, updatePayload);
-
-    // eslint-disable-next-line no-console
-    console.log("RESPONSE - milestones (update)", response);
-
-    if ((response as any).error) {
-      // eslint-disable-next-line no-console
-      console.error("ERROR - milestones (update)", (response as any).error);
-      throw (response as any).error;
-    }
-
+    if ((response as any).error) throw (response as any).error;
     const { data } = response as any;
     if (data) setMilestones(prev => prev.map(item => item.id === data.id ? (data as Milestone) : item));
   };
@@ -467,92 +437,26 @@ const ProjectManagerPage = () => {
       priority: "medium",
       deadline: payload.deadline ? payload.deadline : null,
     };
-
-    // eslint-disable-next-line no-console
-    console.log("INSERT PAYLOAD - task_items", insertPayload);
-
     const response = await createTaskItem(insertPayload as any);
-
-    // eslint-disable-next-line no-console
-    console.log("RESPONSE - task_items", response);
-
-    if ((response as any).error) {
-      // eslint-disable-next-line no-console
-      console.error("ERROR - task_items", (response as any).error);
-      throw (response as any).error;
-    }
-
+    if ((response as any).error) throw (response as any).error;
     const updatedTasks = await getTaskItems(project.id);
-
-    // eslint-disable-next-line no-console
-    console.log("RESPONSE - task_items (refetch)", updatedTasks);
-
-    if (updatedTasks.error) {
-      // eslint-disable-next-line no-console
-      console.error("ERROR - task_items (refetch)", updatedTasks.error);
-      throw updatedTasks.error;
-    }
-
+    if (updatedTasks.error) throw updatedTasks.error;
     setTasks(updatedTasks.data || []);
   };
 
   const handleUpdateTask = async (tid: string, payload: any) => {
-    const updatePayload = payload;
-
-    // eslint-disable-next-line no-console
-    console.log("UPDATE PAYLOAD - task_items", { id: tid, payload: updatePayload });
-
-    const response = await updateTaskItem(tid, updatePayload);
-
-    // eslint-disable-next-line no-console
-    console.log("RESPONSE - task_items (update)", response);
-
-    if ((response as any).error) {
-      // eslint-disable-next-line no-console
-      console.error("ERROR - task_items (update)", (response as any).error);
-      throw (response as any).error;
-    }
-
+    const response = await updateTaskItem(tid, payload);
+    if ((response as any).error) throw (response as any).error;
     const updatedTasks = await getTaskItems(project?.id ?? "");
-
-    // eslint-disable-next-line no-console
-    console.log("RESPONSE - task_items (refetch after update)", updatedTasks);
-
-    if (updatedTasks.error) {
-      // eslint-disable-next-line no-console
-      console.error("ERROR - task_items (refetch after update)", updatedTasks.error);
-      throw updatedTasks.error;
-    }
-
+    if (updatedTasks.error) throw updatedTasks.error;
     setTasks(updatedTasks.data || []);
   };
 
   const handleDeleteTask = async (tid: string) => {
-    // eslint-disable-next-line no-console
-    console.log("DELETE PAYLOAD - task_items", { id: tid });
-
     const response = await deleteTaskItem(tid);
-
-    // eslint-disable-next-line no-console
-    console.log("RESPONSE - task_items (delete)", response);
-
-    if ((response as any).error) {
-      // eslint-disable-next-line no-console
-      console.error("ERROR - task_items (delete)", (response as any).error);
-      throw (response as any).error;
-    }
-
+    if ((response as any).error) throw (response as any).error;
     const updatedTasks = await getTaskItems(project?.id ?? "");
-
-    // eslint-disable-next-line no-console
-    console.log("RESPONSE - task_items (refetch after delete)", updatedTasks);
-
-    if (updatedTasks.error) {
-      // eslint-disable-next-line no-console
-      console.error("ERROR - task_items (refetch after delete)", updatedTasks.error);
-      throw updatedTasks.error;
-    }
-
+    if (updatedTasks.error) throw updatedTasks.error;
     setTasks(updatedTasks.data || []);
   };
 
@@ -574,6 +478,19 @@ const ProjectManagerPage = () => {
             onAddMilestone={handleAddMilestone}
             onUpdateMilestone={handleUpdateMilestone}
             onDeleteMilestone={handleDeleteMilestone}
+            members={members.map(m => ({
+               id: m.id,
+               user_id: m.user_id,
+               display_name: m.user_profiles?.display_name || 'Member',
+               email: (m as any).user_profiles?.email,
+               role: m.role as any
+            }))}
+            currentMemberRole={currentMemberRole}
+            onAddMember={async (uid, role) => { await addMember({ user_id: uid, role }); }}
+            onUpdateMemberRole={async (id, role) => { await updateMemberRole({ id, role }); }}
+            onRemoveMember={async (id) => { await removeMember(id); }}
+            onSearchUsers={searchUsersApi}
+            onAddRedirect={() => setActiveTab('team')}
           />
         );
       case "milestones":
@@ -591,14 +508,30 @@ const ProjectManagerPage = () => {
           </div>
         );
       case "tasks":
+        if (milestones.length === 0) {
+          return (
+            <div className="max-w-3xl mx-auto py-24 flex flex-col items-center justify-center text-center space-y-6">
+               <div className="w-20 h-20 bg-slate-900 rounded-3xl flex items-center justify-center border border-slate-800 text-3xl shadow-xl">🔒</div>
+               <div className="space-y-2">
+                  <h3 className="text-xl font-bold text-slate-100 italic">Project Structure Required</h3>
+                  <p className="text-slate-500 max-w-sm">Tasks must be linked to a strategic milestone. Create your first milestone to unlock this project stream.</p>
+               </div>
+               <button 
+                onClick={() => setActiveTab('milestones')}
+                className="btn-primary py-3 px-8 font-bold text-sm tracking-wide"
+               >
+                  Go to Milestones →
+               </button>
+            </div>
+          );
+        }
         return (
           <div className="max-w-5xl mx-auto space-y-8">
-            {milestones.length === 0 ? (
-              <div className="glass-panel p-12 text-center text-slate-500">
-                You must create a milestone before adding tasks.
-              </div>
-            ) : (
-              milestones.map(m => (
+            <div className="flex items-center justify-between px-2">
+                 <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">{milestones.length} Milestone Tracks</h3>
+                 <span className="text-[10px] text-primary font-bold bg-primary/10 px-3 py-1 rounded-full border border-primary/20">Unlocked</span>
+            </div>
+            {milestones.map(m => (
                 <div key={m.id} className="space-y-4">
                   <div className="flex items-center justify-between px-2">
                     <div className="flex items-center gap-3">
@@ -624,13 +557,12 @@ const ProjectManagerPage = () => {
                     onBulkDelete={async (ids) => { for(const tid of ids) await deleteTaskItem(tid); setTasks(prev => prev.filter(t => !ids.includes(t.id))); }}
                   />
                 </div>
-              ))
-            )}
+              ))}
           </div>
         );
       case "reports":
         return (
-          <div className="max-w-3xl mx-auto">
+          <div className="max-w-5xl mx-auto">
             <ReportsCard 
               project={project} 
               onGenerateReport={async (type) => { 
@@ -664,14 +596,20 @@ const ProjectManagerPage = () => {
         );
       case "team":
         return (
-          <div className="max-w-2xl mx-auto">
+          <div className="max-w-3xl mx-auto">
             <TeamCard 
-              members={members.map(m => ({ 
-                id: m.user_id, 
-                display_name: m.user_profiles?.display_name || 'Team Member', 
-                role: m.role, 
-                avatarColor: '' 
+              members={members.map(m => ({
+                 id: m.id,
+                 user_id: m.user_id,
+                 display_name: m.user_profiles?.display_name || 'Member',
+                 email: (m as any).user_profiles?.email,
+                 role: m.role as any
               }))} 
+              canManage={user.id === project.user_id || currentMemberRole === 'owner' || currentMemberRole === 'admin'}
+              onAdd={async (uid, role) => { await addMember({ user_id: uid, role }); }}
+              onUpdateRole={async (id, role) => { await updateMemberRole({ id, role }); }}
+              onRemove={async (id) => { await removeMember(id); }}
+              onSearch={searchUsersApi}
             />
           </div>
         );
@@ -707,16 +645,8 @@ const ProjectManagerPage = () => {
                     await loadHistory(p);
                   }}
                   onDeleteSelected={async (ids) => {
-                    // eslint-disable-next-line no-console
-                    console.log("DELETE PAYLOAD - project_logs", { ids });
                     const resp = await supabase.from("project_logs").delete().in("id", ids);
-                    // eslint-disable-next-line no-console
-                    console.log("RESPONSE - project_logs (delete selected)", resp);
-                    if (resp.error) {
-                      // eslint-disable-next-line no-console
-                      console.error("ERROR - project_logs (delete selected)", resp.error);
-                      throw resp.error;
-                    }
+                    if (resp.error) throw resp.error;
                     await loadHistory(historyPage);
                     const updatedLogs = await getProjectLogs(project.id);
                     if (updatedLogs.error) throw updatedLogs.error;
@@ -749,7 +679,7 @@ const ProjectManagerPage = () => {
   if (!project) return <div className="p-12 text-center text-slate-500">Project not found.</div>;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6 max-w-full lg:max-w-7xl mx-auto w-full px-0 sm:px-2">
       <ProjectHeader 
         project={project} 
         progress={progress} 
@@ -786,7 +716,6 @@ const ProjectManagerPage = () => {
 
             downloadTxt(`${project.name.replace(/\s+/g, "_")}_full_export.txt`, content);
           } catch (error) {
-            // eslint-disable-next-line no-console
             console.error("ERROR - export full project", error);
             window.alert("Export failed. Check console for details.");
           }
@@ -806,46 +735,20 @@ const ProjectManagerPage = () => {
               `Notes:\n${latest.notes ?? ""}\n`;
             downloadTxt(`${project.name.replace(/\s+/g, "_")}_today_report.txt`, content);
           } catch (error) {
-            // eslint-disable-next-line no-console
             console.error("ERROR - generate today report", error);
             window.alert("Report generation failed. Check console for details.");
           }
         }} 
-        onAddUpdate={() => setShowUpdateModal(true)} 
+        onAddUpdate={() => setActiveTab('overview')} 
       />
-      <div className="glass-panel overflow-hidden">
-        <ProjectTabs activeTab={activeTab} onChange={setActiveTab} />
-      </div>
-      <div className="pb-12">{renderTab()}</div>
 
-      {showUpdateModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="w-full max-w-3xl space-y-3">
-            <div className="flex items-center justify-between px-1">
-              <div className="text-sm font-semibold text-slate-200">Add Update</div>
-              <button
-                className="text-slate-400 hover:text-slate-200 transition"
-                onClick={() => setShowUpdateModal(false)}
-              >
-                ×
-              </button>
-            </div>
-            <WorkLogCard
-              onSubmit={async (p) => {
-                await handleLogSubmit(p);
-                setShowUpdateModal(false);
-              }}
-            />
-          </div>
-        </div>
-      )}
+      <ProjectTabs activeTab={activeTab} onChange={setActiveTab} />
+
+      <div className="animate-in fade-in duration-300">
+        {renderTab()}
+      </div>
     </div>
   );
 };
 
 export default ProjectManagerPage;
-

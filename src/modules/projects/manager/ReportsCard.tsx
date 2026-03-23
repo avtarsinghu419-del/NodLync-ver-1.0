@@ -124,7 +124,7 @@ const ReportsCard = ({ project, onGenerateReport }: Props) => {
       )}
 
       <p className="text-[10px] text-slate-600 text-center">
-        Generated: {formatDateTime(project.updated_at ?? project.created_at ?? "")}
+        Generated: {formatDateTime(project.created_at ?? "")}
       </p>
     </div>
   );

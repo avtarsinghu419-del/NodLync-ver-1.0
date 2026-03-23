@@ -1,218 +1,110 @@
-﻿import { useEffect, useState } from "react";
-import {
-  createProject,
-  deleteProject,
-  getProjects,
-  updateProject,
-} from "../api/projectsApi";
+import { useEffect, useState } from "react";
 import ProjectForm from "../modules/projects/ProjectForm";
 import ProjectList from "../modules/projects/ProjectList";
-import useAppStore from "../store/useAppStore";
 import type { ProjectStatus } from "../types";
-import { formatDateTime } from "../utils/format";
+import DailySummaryModal from "../modules/projects/DailySummaryModal";
+import ModuleHeader from "../components/ModuleHeader";
+import { useProjects } from "../hooks/useProjects";
 
 const ProjectsPage = () => {
   const {
-    user,
     projects,
+    loading,
+    error,
     selectedProject,
     isCreateMode,
-    setProjects,
-    addProject,
-    updateProject: updateProjectState,
-    removeProject,
+    fetchProjects,
+    handleCreate,
+    handleUpdate,
+    handleDelete,
     setSelectedProject,
     setIsCreateMode,
-    projectsLoading,
-    projectsError,
-    setProjectsLoading,
-    setProjectsError,
-  } = useAppStore();
+    user,
+  } = useProjects();
+
   const [formBusy, setFormBusy] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
 
   useEffect(() => {
-    if (!user) {
-      return;
-    }
-    const load = async () => {
-      setProjectsLoading(true);
-      setProjectsError(null);
-      const { data, error } = await getProjects(user.id);
-      if (error) {
-        setProjectsError(error.message);
-      } else {
-        const list = data ?? [];
-        setProjects(list);
-        if (list.length === 0) {
-          setIsCreateMode(true);
-        } else {
-          setSelectedProject(list[0]);
-          setIsCreateMode(false);
-        }
-      }
-      setProjectsLoading(false);
-    };
-    load();
-  }, [user, setProjectsLoading, setProjects, setProjectsError, setIsCreateMode, setSelectedProject]);
+    fetchProjects();
+  }, [fetchProjects]);
 
-  const handleCreateProject = async (payload: {
+  const onAddProject = async (payload: {
     name: string;
     description: string;
     status: ProjectStatus;
   }) => {
-    if (!user) return;
     setFormBusy(true);
-    setProjectsError(null);
-    const { data, error } = await createProject({
-      ...payload,
-      user_id: user.id,
-    });
-    if (error) {
-      setProjectsError(error.message);
-    } else if (data) {
-      addProject(data);
-      setSelectedProject(data);
-      setIsCreateMode(false);
-    }
+    await handleCreate(payload);
     setFormBusy(false);
   };
 
-  const handleUpdateProject = async (payload: {
+  const onEditProject = async (payload: {
     name: string;
     description: string;
     status: ProjectStatus;
   }) => {
     if (!selectedProject) return;
     setFormBusy(true);
-    setProjectsError(null);
-    const { data, error } = await updateProject(selectedProject.id, payload);
-    if (error) {
-      setProjectsError(error.message);
-    } else if (data) {
-      updateProjectState(data);
-    }
+    await handleUpdate(selectedProject.id, payload);
     setFormBusy(false);
   };
 
-  const handleDeleteProject = async () => {
-    if (!selectedProject) return;
-    const nextProject = projects.find((p) => p.id !== selectedProject.id);
-    setFormBusy(true);
-    setProjectsError(null);
-    const { error } = await deleteProject(selectedProject.id);
-    if (error) {
-      setProjectsError(error.message);
-    } else {
-      removeProject(selectedProject.id);
-      if (nextProject) {
-        setSelectedProject(nextProject);
-        setIsCreateMode(false);
-      } else {
-        setSelectedProject(null);
-        setIsCreateMode(true);
-      }
-    }
-    setFormBusy(false);
-  };
-
-  const handleBulkDeleteProjects = async (ids: string[]) => {
+  const onDeleteSelected = async (ids: string[]) => {
     setBulkDeleting(true);
-    setProjectsError(null);
-    const results = await Promise.all(ids.map((id) => deleteProject(id)));
-    const failed = results.find((result) => result.error);
-    if (failed?.error) {
-      setProjectsError(failed.error.message);
-      setBulkDeleting(false);
-      return;
-    }
-
-    ids.forEach((id) => removeProject(id));
-    if (selectedProject && ids.includes(selectedProject.id)) {
-      const remaining = projects.filter((project) => !ids.includes(project.id));
-      if (remaining.length > 0) {
-        setSelectedProject(remaining[0]);
-        setIsCreateMode(false);
-      } else {
-        setSelectedProject(null);
-        setIsCreateMode(true);
-      }
+    for (const id of ids) {
+      await handleDelete(id);
     }
     setBulkDeleting(false);
   };
 
-  const handleSelectProject = (project: typeof selectedProject) => {
-    if (!project) return;
-    setProjectsError(null);
-    setSelectedProject(project);
-    setIsCreateMode(false);
-  };
-
-  const handleCreateMode = () => {
-    setProjectsError(null);
-    setIsCreateMode(true);
-  };
-
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[300px,1fr] gap-6 h-full min-h-[600px]">
-      <ProjectList
-        projects={projects}
-        selectedId={isCreateMode ? undefined : selectedProject?.id}
-        onSelect={handleSelectProject}
-        onCreate={handleCreateMode}
-        onDeleteSelected={handleBulkDeleteProjects}
-        loading={projectsLoading}
-        bulkDeleting={bulkDeleting}
-      />
+    <div className="flex flex-col gap-6 h-full pb-12">
+      {/* Page Header */}
+      <ModuleHeader title="Projects" description="WORKSPACE" icon="🚀">
+        <button
+          className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-100 rounded-lg text-sm font-semibold transition-all duration-200 border border-slate-700 flex items-center gap-2 shadow-lg shadow-black/40 hover:scale-[1.02] active:scale-[0.98]"
+          onClick={() => setShowSummary(true)}
+          title="Daily log summary"
+        >
+          <span className="text-emerald-400">📊</span> Summary
+        </button>
+      </ModuleHeader>
 
-      <div className="flex flex-col gap-4">
-        {projectsError && (
-          <div className="glass-panel border border-rose-800 bg-rose-900/40 px-4 py-3 text-sm text-rose-100 flex items-center gap-2">
-            <span>Warning</span>
-            <span>{projectsError}</span>
-          </div>
-        )}
+      {/* Main Grid: Projects List + Selection/Form */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 flex-1 min-h-0">
+        <div className="lg:col-span-5 h-full min-h-[400px]">
+          <ProjectList
+            projects={projects}
+            selectedId={selectedProject?.id}
+            onSelect={setSelectedProject}
+            onCreate={() => setIsCreateMode(true)}
+            onDeleteSelected={onDeleteSelected}
+            loading={loading}
+            bulkDeleting={bulkDeleting}
+          />
+        </div>
 
-        <ProjectForm
-          mode={isCreateMode || !selectedProject ? "create" : "edit"}
-          initial={isCreateMode ? null : selectedProject}
-          onSubmit={isCreateMode || !selectedProject ? handleCreateProject : handleUpdateProject}
-          onDelete={!isCreateMode && selectedProject ? handleDeleteProject : undefined}
-          onCancel={
-            isCreateMode && projects.length > 0
-              ? () => {
-                  setIsCreateMode(false);
-                  if (selectedProject) setSelectedProject(selectedProject);
-                  else if (projects.length > 0) setSelectedProject(projects[0]);
-                }
-              : undefined
-          }
-          busy={formBusy}
-          error={projectsError ?? undefined}
-        />
-
-        {!isCreateMode && selectedProject && (
-          <div className="glass-panel p-4 flex items-center justify-between gap-4">
-            <div>
-              <p className="text-xs text-slate-500 uppercase tracking-wider mb-0.5">Created</p>
-              <p className="text-sm font-medium text-slate-200">
-                {formatDateTime(selectedProject.created_at ?? "")}
-              </p>
-            </div>
-            {selectedProject.updated_at && (
-              <div className="text-right">
-                <p className="text-xs text-slate-500 uppercase tracking-wider mb-0.5">Last Updated</p>
-                <p className="text-sm font-medium text-slate-200">
-                  {formatDateTime(selectedProject.updated_at)}
-                </p>
-              </div>
-            )}
-          </div>
-        )}
+        <div className="lg:col-span-7 h-full">
+          <ProjectForm
+            key={selectedProject?.id || "create"}
+            mode={isCreateMode ? "create" : "edit"}
+            initial={selectedProject}
+            onSubmit={isCreateMode ? onAddProject : onEditProject}
+            onDelete={async () => { if (selectedProject) await handleDelete(selectedProject.id); }}
+            onCancel={() => setIsCreateMode(false)}
+            busy={formBusy}
+            error={error}
+          />
+        </div>
       </div>
+
+      {showSummary && user && (
+        <DailySummaryModal isOpen={showSummary} onClose={() => setShowSummary(false)} userId={user.id} />
+      )}
     </div>
   );
 };
 
 export default ProjectsPage;
-

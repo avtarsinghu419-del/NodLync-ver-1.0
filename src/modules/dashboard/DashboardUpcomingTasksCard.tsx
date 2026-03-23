@@ -1,4 +1,4 @@
-import type { TaskItem } from "../../api/projectManagerApi";
+import type { TaskItem } from "../../api/tasksApi";
 
 export type UpcomingTaskRow = {
   task: TaskItem;

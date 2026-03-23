@@ -10,6 +10,7 @@ import InlineSpinner from "../components/InlineSpinner";
 import PaginationControls from "../components/PaginationControls";
 import { usePagination } from "../hooks/usePagination";
 import { useLocation, useNavigate } from "react-router-dom";
+import ModuleHeader from "../components/ModuleHeader";
 
 const SettingsPage = () => {
   const user = useAppStore((s) => s.user);
@@ -190,10 +191,11 @@ const SettingsPage = () => {
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-4 h-full flex flex-col">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-100 uppercase tracking-widest mb-2">Settings Hub</h1>
-        <p className="text-slate-400">Manage your profile, application preferences, and view system logs in one place.</p>
-      </div>
+      <ModuleHeader
+        title="Settings Hub"
+        description="MANAGE YOUR PROFILE, APPLICATION PREFERENCES, AND VIEW SYSTEM LOGS"
+        icon="⚙️"
+      />
 
       {/* Tabs Navigation */}
       <div className="flex items-center gap-1 mb-6 border-b border-slate-800">
