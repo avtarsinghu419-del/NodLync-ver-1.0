@@ -190,7 +190,7 @@ const ApiVaultPanel = () => {
           description="STORE, SEARCH, REVEAL, AND MANAGE PROVIDER KEYS"
           icon="🔑"
         >
-          <span className="text-xs text-slate-500 mr-2">Project context: {projectName ?? "Pick a project"}</span>
+          <span className="text-xs text-fg-muted mr-2">Project context: {projectName ?? "Pick a project"}</span>
           <button type="button" className="btn-primary py-2 text-sm font-bold" onClick={() => setIsModalOpen(true)}>
             Add API Key
           </button>
@@ -200,7 +200,7 @@ const ApiVaultPanel = () => {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="grid flex-1 gap-4 md:grid-cols-2">
               <label className="block space-y-2">
-                <span className="text-xs uppercase tracking-[0.18em] text-slate-500">Search</span>
+                <span className="text-xs uppercase tracking-[0.18em] text-fg-muted">Search</span>
                 <input
                   value={searchTerm}
                   onChange={(e) => {
@@ -208,12 +208,12 @@ const ApiVaultPanel = () => {
                     pagination.setCurrentPage(1);
                   }}
                   placeholder="Search by name or provider"
-                  className="w-full rounded-lg border border-slate-700 bg-surface px-3 py-2.5 text-sm text-slate-100 focus:border-primary focus:outline-none"
+                  className="w-full rounded-lg border border-stroke bg-surface px-3 py-2.5 text-sm text-fg focus:border-primary focus:outline-none"
                 />
               </label>
 
               <label className="block space-y-2">
-                <span className="text-xs uppercase tracking-[0.18em] text-slate-500">Tag Filter</span>
+                <span className="text-xs uppercase tracking-[0.18em] text-fg-muted">Tag Filter</span>
                 <input
                   value={tagFilter}
                   onChange={(e) => {
@@ -221,12 +221,12 @@ const ApiVaultPanel = () => {
                     pagination.setCurrentPage(1);
                   }}
                   placeholder="Filter by tag text"
-                  className="w-full rounded-lg border border-slate-700 bg-surface px-3 py-2.5 text-sm text-slate-100 focus:border-primary focus:outline-none"
+                  className="w-full rounded-lg border border-stroke bg-surface px-3 py-2.5 text-sm text-fg focus:border-primary focus:outline-none"
                 />
               </label>
             </div>
 
-            <div className="text-sm text-slate-500">{filteredItems.length} of {items.length} keys shown</div>
+            <div className="text-sm text-fg-muted">{filteredItems.length} of {items.length} keys shown</div>
           </div>
 
           <BulkDeleteBar
@@ -248,9 +248,9 @@ const ApiVaultPanel = () => {
               <InlineSpinner />
             </div>
           ) : filteredItems.length === 0 ? (
-            <div className="flex min-h-56 flex-col items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-900/30 px-6 text-center">
-              <p className="text-lg font-medium text-slate-200">{items.length === 0 ? "No API keys saved yet." : "No keys match your filters."}</p>
-              <p className="mt-2 max-w-md text-sm text-slate-500">
+            <div className="flex min-h-56 flex-col items-center justify-center rounded-xl border border-dashed border-stroke bg-panel/30 px-6 text-center">
+              <p className="text-lg font-medium text-fg-secondary">{items.length === 0 ? "No API keys saved yet." : "No keys match your filters."}</p>
+              <p className="mt-2 max-w-md text-sm text-fg-muted">
                 {items.length === 0
                   ? "Add your first provider credential to start managing keys here."
                   : "Try a broader search or clear the tag filter to see more results."}

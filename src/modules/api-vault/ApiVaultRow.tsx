@@ -29,7 +29,7 @@ const ApiVaultRow = ({
   const tags = normalizeTagList(item.tags);
 
   return (
-    <tr className="border-t border-slate-800 align-top">
+    <tr className="border-t border-stroke align-top">
       <td className="px-4 py-4">
         <input
           type="checkbox"
@@ -39,12 +39,12 @@ const ApiVaultRow = ({
           aria-label={`Select ${item.key_name}`}
         />
       </td>
-      <td className="px-4 py-4 text-sm font-medium text-slate-100">{item.key_name}</td>
-      <td className="px-4 py-4 text-sm text-slate-300">{item.provider}</td>
-      <td className="px-4 py-4 text-sm text-slate-400">
+      <td className="px-4 py-4 text-sm font-medium text-fg">{item.key_name}</td>
+      <td className="px-4 py-4 text-sm text-fg-secondary">{item.provider}</td>
+      <td className="px-4 py-4 text-sm text-fg-muted">
         <div className="max-w-xs">
           <p>{item.description?.trim() || "No description provided."}</p>
-          <p className="mt-2 font-mono text-xs text-slate-500 break-all">
+          <p className="mt-2 font-mono text-xs text-fg-muted break-all">
             {isVisible ? item.api_key : maskApiKey(item.api_key)}
           </p>
           {copyFeedback ? <p className="mt-2 text-xs text-emerald-400">{copyFeedback}</p> : null}
@@ -53,7 +53,7 @@ const ApiVaultRow = ({
       <td className="px-4 py-4">
         <div className="flex flex-wrap gap-2">
           {tags.length === 0 ? (
-            <span className="rounded-full border border-slate-700 px-2 py-1 text-xs text-slate-500">
+            <span className="rounded-full border border-stroke px-2 py-1 text-xs text-fg-muted">
               No tags
             </span>
           ) : (
@@ -68,7 +68,7 @@ const ApiVaultRow = ({
           )}
         </div>
       </td>
-      <td className="px-4 py-4 text-sm text-slate-400">{formatDateTime(item.created_at ?? undefined)}</td>
+      <td className="px-4 py-4 text-sm text-fg-muted">{formatDateTime(item.created_at ?? undefined)}</td>
       <td className="px-4 py-4">
         <ApiVaultActions
           isVisible={isVisible}

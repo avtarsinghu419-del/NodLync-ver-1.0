@@ -1,6 +1,8 @@
 import { useState } from "react";
+import GeneratedText from "../../../components/GeneratedText";
 import type { Project } from "../../../types";
 import { formatDateTime } from "../../../utils/format";
+import { normalizeGeneratedText } from "../../../utils/generatedText";
 
 interface Props {
   project: Project;
@@ -20,7 +22,7 @@ const ReportsCard = ({ project, onGenerateReport }: Props) => {
 
   const handleExport = () => {
     if (!preview) return;
-    const blob = new Blob([preview], { type: "text/plain" });
+    const blob = new Blob([normalizeGeneratedText(preview)], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -34,13 +36,13 @@ const ReportsCard = ({ project, onGenerateReport }: Props) => {
       {/* Header */}
       <div className="flex items-center gap-2">
         <span className="text-base">📄</span>
-        <h3 className="font-semibold text-slate-200 text-sm">Quick Reports</h3>
+        <h3 className="font-semibold text-fg-secondary text-sm">Quick Reports</h3>
       </div>
 
       {/* Report options */}
       <div className="space-y-2">
         <button
-          className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-slate-700 hover:border-primary/50 hover:bg-slate-800/50 transition group"
+          className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-stroke hover:border-primary/50 hover:bg-surface/50 transition group"
           onClick={() => handleGenerate("today")}
           disabled={!!generating}
         >
@@ -49,25 +51,25 @@ const ReportsCard = ({ project, onGenerateReport }: Props) => {
               <span className="text-xs">📅</span>
             </div>
             <div className="text-left">
-              <p className="text-sm font-medium text-slate-200 group-hover:text-primary transition">
+              <p className="text-sm font-medium text-fg-secondary group-hover:text-primary transition">
                 Today's Report
               </p>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-fg-muted">
                 Daily work log summary
               </p>
             </div>
           </div>
           {generating === "today" ? (
-            <span className="text-xs text-slate-500 animate-pulse">Generating…</span>
+            <span className="text-xs text-fg-muted animate-pulse">Generating…</span>
           ) : (
-            <svg className="w-4 h-4 text-slate-500 group-hover:text-primary transition" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="w-4 h-4 text-fg-muted group-hover:text-primary transition" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>
           )}
         </button>
 
         <button
-          className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-slate-700 hover:border-primary/50 hover:bg-slate-800/50 transition group"
+          className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-stroke hover:border-primary/50 hover:bg-surface/50 transition group"
           onClick={() => handleGenerate("full")}
           disabled={!!generating}
         >
@@ -76,18 +78,18 @@ const ReportsCard = ({ project, onGenerateReport }: Props) => {
               <span className="text-xs">📊</span>
             </div>
             <div className="text-left">
-              <p className="text-sm font-medium text-slate-200 group-hover:text-accent transition">
+              <p className="text-sm font-medium text-fg-secondary group-hover:text-accent transition">
                 Full Project Report
               </p>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-fg-muted">
                 Complete project overview
               </p>
             </div>
           </div>
           {generating === "full" ? (
-            <span className="text-xs text-slate-500 animate-pulse">Generating…</span>
+            <span className="text-xs text-fg-muted animate-pulse">Generating…</span>
           ) : (
-            <svg className="w-4 h-4 text-slate-500 group-hover:text-accent transition" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="w-4 h-4 text-fg-muted group-hover:text-accent transition" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>
           )}
@@ -97,13 +99,14 @@ const ReportsCard = ({ project, onGenerateReport }: Props) => {
       {/* Preview */}
       {preview ? (
         <div className="space-y-2">
-          <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">
+          <p className="text-xs text-fg-muted uppercase tracking-wider font-semibold">
             Preview
           </p>
-          <div className="rounded-lg border border-slate-700 bg-surface p-3 max-h-36 overflow-y-auto">
-            <pre className="text-xs text-slate-300 whitespace-pre-wrap font-mono leading-relaxed">
-              {preview}
-            </pre>
+          <div className="rounded-lg border border-stroke bg-surface p-3 max-h-36 overflow-y-auto">
+            <GeneratedText
+              text={normalizeGeneratedText(preview)}
+              className="text-xs text-fg-secondary leading-relaxed"
+            />
           </div>
           <button
             className="w-full btn-ghost text-sm flex items-center justify-center gap-1.5"
@@ -116,14 +119,14 @@ const ReportsCard = ({ project, onGenerateReport }: Props) => {
           </button>
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-slate-700 p-4 text-center">
-          <p className="text-xs text-slate-600">
+        <div className="rounded-lg border border-dashed border-stroke p-4 text-center">
+          <p className="text-xs text-fg-muted">
             Select a report type above to preview
           </p>
         </div>
       )}
 
-      <p className="text-[10px] text-slate-600 text-center">
+      <p className="text-[10px] text-fg-muted text-center">
         Generated: {formatDateTime(project.created_at ?? "")}
       </p>
     </div>

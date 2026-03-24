@@ -22,13 +22,13 @@ export default function DashboardUpcomingTasksCard({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-lg">🕒</span>
-          <h3 className="font-semibold text-slate-200 text-sm">Upcoming Tasks</h3>
+          <h3 className="font-semibold text-fg-secondary text-sm">Upcoming Tasks</h3>
         </div>
-        <span className="text-[10px] text-slate-500 font-mono">{tasks.length} items</span>
+        <span className="text-[10px] text-fg-muted font-mono">{tasks.length} items</span>
       </div>
 
       {tasks.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-800/60 p-6 text-sm text-slate-500">
+        <div className="rounded-xl border border-dashed border-stroke/60 p-6 text-sm text-fg-muted">
           No upcoming tasks with deadlines.
         </div>
       ) : (
@@ -38,21 +38,21 @@ export default function DashboardUpcomingTasksCard({
             return (
               <li
                 key={row.task.id}
-                className="flex items-start gap-3 rounded-lg border border-slate-800/50 bg-slate-950/10 px-3 py-2"
+                className="flex items-start gap-3 rounded-lg border border-stroke/50 bg-panel/10 px-3 py-2"
               >
                 <span className="w-2 h-2 mt-2 rounded-full bg-primary/80" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm text-slate-100 font-medium truncate">
+                    <p className="text-sm text-fg font-medium truncate">
                       {row.task.title}
                     </p>
                     {due ? (
-                      <span className="text-[10px] text-slate-500 font-mono whitespace-nowrap">
+                      <span className="text-[10px] text-fg-muted font-mono whitespace-nowrap">
                         {due}
                       </span>
                     ) : null}
                   </div>
-                  <p className="text-xs text-slate-400 truncate">
+                  <p className="text-xs text-fg-muted truncate">
                     {row.projectName}
                   </p>
                 </div>

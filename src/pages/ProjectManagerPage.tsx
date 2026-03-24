@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useMemo } from "react";
-import { useParams } from "react-router-dom";
+import { useLocation, useParams, useSearchParams } from "react-router-dom";
 import { getProjects } from "../api/projectsApi";
 import { supabase } from "../api/supabaseClient";
 import { getMilestones, createMilestone, updateMilestone, deleteMilestone, type Milestone } from "../api/milestonesApi";
@@ -12,12 +12,19 @@ import ProjectTabs, { type TabId } from "../modules/projects/manager/ProjectTabs
 import MilestonesCard from "../modules/projects/manager/MilestonesCard";
 import TasksPanel from "../modules/projects/manager/TasksPanel";
 import TeamCard, { type ProjectRole } from "../modules/projects/manager/TeamCard";
+import TeamMembersOverview from "../modules/projects/manager/TeamMembersOverview";
 import WorkLogCard from "../modules/projects/manager/WorkLogCard";
 import ReportsCard from "../modules/projects/manager/ReportsCard";
 import useAppStore from "../store/useAppStore";
 import type { Project } from "../types";
 import { formatDateTime } from "../utils/format";
 import { useMembers } from "../hooks/useMembers";
+
+const PROJECT_TABS: TabId[] = ["overview", "milestones", "tasks", "reports", "team", "history"];
+
+function isTabId(value: string | null): value is TabId {
+  return value !== null && PROJECT_TABS.includes(value as TabId);
+}
 
 const HistoryList = ({
   project,
@@ -71,7 +78,7 @@ const HistoryList = ({
     <div className="space-y-4">
       {selectedIds.length > 0 && (
         <div className="glass-panel p-3 flex items-center justify-between">
-          <div className="text-xs text-slate-400">
+          <div className="text-xs text-fg-muted">
             {selectedIds.length} selected
           </div>
           <div className="flex items-center gap-2">
@@ -99,7 +106,7 @@ const HistoryList = ({
       )}
 
       <div className="glass-panel divide-y divide-slate-800">
-        <div className="flex items-center gap-3 px-4 py-3 text-xs uppercase tracking-[0.18em] text-slate-500">
+        <div className="flex items-center gap-3 px-4 py-3 text-xs uppercase tracking-[0.18em] text-fg-muted">
           <input
             type="checkbox"
             checked={logs.length > 0 && logs.every((l) => selected.has(l.id))}
@@ -120,7 +127,7 @@ const HistoryList = ({
                   className="h-4 w-4 accent-primary"
                   aria-label={`Select log ${log.created_at}`}
                 />
-                <span className="text-xs text-slate-500 font-mono">
+                <span className="text-xs text-fg-muted font-mono">
                   {formatDateTime(log.created_at)}
                 </span>
               </label>
@@ -129,19 +136,19 @@ const HistoryList = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <div className="text-[10px] text-emerald-400 uppercase font-bold mb-1">Completed</div>
-                <div className="text-sm text-slate-300 whitespace-pre-wrap">{log.completed_work || ""}</div>
+                <div className="text-sm text-fg-secondary whitespace-pre-wrap">{log.completed_work || ""}</div>
               </div>
               <div>
                 <div className="text-[10px] text-amber-400 uppercase font-bold mb-1">Next Steps</div>
-                <div className="text-sm text-slate-300 whitespace-pre-wrap">{log.next_steps || ""}</div>
+                <div className="text-sm text-fg-secondary whitespace-pre-wrap">{log.next_steps || ""}</div>
               </div>
               <div>
                 <div className="text-[10px] text-rose-400 uppercase font-bold mb-1">Blockers</div>
-                <div className="text-sm text-slate-300 whitespace-pre-wrap">{log.blockers || ""}</div>
+                <div className="text-sm text-fg-secondary whitespace-pre-wrap">{log.blockers || ""}</div>
               </div>
               <div>
-                <div className="text-[10px] text-slate-400 uppercase font-bold mb-1">Notes</div>
-                <div className="text-sm text-slate-300 whitespace-pre-wrap">{log.notes || ""}</div>
+                <div className="text-[10px] text-fg-muted uppercase font-bold mb-1">Notes</div>
+                <div className="text-sm text-fg-secondary whitespace-pre-wrap">{log.notes || ""}</div>
               </div>
             </div>
           </div>
@@ -149,7 +156,7 @@ const HistoryList = ({
       </div>
 
       <div className="glass-panel p-4 flex items-center justify-between">
-        <div className="text-xs text-slate-500">
+        <div className="text-xs text-fg-muted">
           Showing {startItem}-{endItem} of {total} for {project.name}
         </div>
         <div className="flex items-center gap-2">
@@ -160,7 +167,7 @@ const HistoryList = ({
           >
             Prev
           </button>
-          <span className="text-xs text-slate-500 font-mono">
+          <span className="text-xs text-fg-muted font-mono">
             {page}/{totalPages}
           </span>
           <button
@@ -191,49 +198,64 @@ const OverviewTab = ({
   milestones,
   logs,
   onLogSubmit,
+  workLogDraft,
+  onWorkLogDraftChange,
   userId,
   onAddMilestone,
   onUpdateMilestone,
   onDeleteMilestone,
-  members,
   currentMemberRole,
-  onAddMember,
-  onUpdateMemberRole,
-  onRemoveMember,
-  onSearchUsers,
   onAddRedirect,
 }: {
   project: Project;
   milestones: Milestone[];
   logs: ProjectLog[];
   onLogSubmit: (payload: any) => Promise<void>;
+  workLogDraft: {
+    completed: string;
+    next_steps: string;
+    blockers: string;
+    notes: string;
+  };
+  onWorkLogDraftChange: (next: {
+    completed: string;
+    next_steps: string;
+    blockers: string;
+    notes: string;
+  }) => void;
   userId: string;
   onAddMilestone: (payload: { title: string; deadline?: string | null }) => Promise<void>;
   onUpdateMilestone: (m: any) => Promise<void>;
   onDeleteMilestone: (id: string) => Promise<void>;
-  members: any[];
   currentMemberRole: ProjectRole;
-  onAddMember: (uid: string, role: ProjectRole) => Promise<void>;
-  onUpdateMemberRole: (id: string, role: ProjectRole) => Promise<void>;
-  onRemoveMember: (id: string) => Promise<void>;
-  onSearchUsers: (q: string) => Promise<any>;
   onAddRedirect: () => void;
 }) => {
+  const { members, loading } = useMembers(project.id);
+  const teamMembers = useMemo(
+    () =>
+      members.map((member) => ({
+        id: member.id,
+        user_id: member.user_id,
+        display_name: member.user_profiles?.display_name || "Member",
+        avatar_url: member.user_profiles?.avatar_url,
+        email: (member as any).user_profiles?.email,
+        role: member.role as ProjectRole,
+      })),
+    [members]
+  );
   const lastCompletedMilestone = [...milestones].reverse().find(m => m.status === 'completed');
   const inProgressMilestone = milestones.find(m => m.status === 'in_progress');
-  const isProjectOwner = userId === project.user_id;
-  const canManage = isProjectOwner || currentMemberRole === 'owner' || currentMemberRole === 'admin';
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr,350px] gap-6">
       <div className="space-y-6">
         {/* Recent Milestones */}
         <div className="glass-panel p-6">
-          <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">Milestone Pulse</h3>
+          <h3 className="text-sm font-bold text-fg-muted uppercase tracking-wider mb-4">Milestone Pulse</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-800/50">
-              <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Last Completed</p>
-              <p className="text-slate-200 font-medium">{lastCompletedMilestone?.title || "No milestones completed yet"}</p>
+            <div className="bg-panel/40 p-4 rounded-xl border border-stroke/50">
+              <p className="text-[10px] text-fg-muted uppercase font-bold mb-1">Last Completed</p>
+              <p className="text-fg-secondary font-medium">{lastCompletedMilestone?.title || "No milestones completed yet"}</p>
             </div>
             <div className="bg-primary/5 p-4 rounded-xl border border-primary/10">
               <p className="text-[10px] text-primary/70 uppercase font-bold mb-1 font-mono">Current Phase</p>
@@ -243,40 +265,44 @@ const OverviewTab = ({
         </div>
 
         {/* Daily Log Input */}
-        <WorkLogCard onSubmit={onLogSubmit} />
+        <WorkLogCard
+          onSubmit={onLogSubmit}
+          value={workLogDraft}
+          onChange={onWorkLogDraftChange}
+        />
 
         {/* Recent Work Logs (Last 5 days approx) */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Recent Activity Logs</h3>
-            <span className="text-[10px] text-slate-500 font-mono">Last {logs.length} entries</span>
+            <h3 className="text-sm font-bold text-fg-muted uppercase tracking-wider">Recent Activity Logs</h3>
+            <span className="text-[10px] text-fg-muted font-mono">Last {logs.length} entries</span>
           </div>
           {logs.length === 0 ? (
-            <div className="glass-panel p-8 text-center text-slate-500 text-sm">No work logs recorded yet.</div>
+            <div className="glass-panel p-8 text-center text-fg-muted text-sm">No work logs recorded yet.</div>
           ) : (
             logs.map(log => (
               <div key={log.id} className="glass-panel p-5 space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                <div className="flex items-center justify-between border-b border-stroke pb-2">
                   <span className="text-xs font-bold text-primary">Team Member</span>
-                  <span className="text-[10px] text-slate-500 font-mono">{formatDateTime(log.created_at)}</span>
+                  <span className="text-[10px] text-fg-muted font-mono">{formatDateTime(log.created_at)}</span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div>
                     <h4 className="text-[10px] text-emerald-400 uppercase font-bold mb-1">Completed</h4>
-                    <p className="text-sm text-slate-300 leading-relaxed">{log.completed_work}</p>
+                    <p className="text-sm text-fg-secondary leading-relaxed">{log.completed_work}</p>
                   </div>
                   <div>
                     <h4 className="text-[10px] text-amber-400 uppercase font-bold mb-1">Next Steps</h4>
-                    <p className="text-sm text-slate-300 leading-relaxed">{log.next_steps}</p>
+                    <p className="text-sm text-fg-secondary leading-relaxed">{log.next_steps}</p>
                   </div>
                   <div>
                     <h4 className="text-[10px] text-rose-400 uppercase font-bold mb-1">Blockers</h4>
-                    <p className="text-sm text-slate-300 leading-relaxed">{log.blockers || <span className="italic opacity-30">None</span>}</p>
+                    <p className="text-sm text-fg-secondary leading-relaxed">{log.blockers || <span className="italic opacity-30">None</span>}</p>
                   </div>
                 </div>
                 {log.notes && (
-                  <div className="pt-2 border-t border-slate-800/50">
-                    <p className="text-xs text-slate-500 italic">{log.notes}</p>
+                  <div className="pt-2 border-t border-stroke/50">
+                    <p className="text-xs text-fg-muted italic">{log.notes}</p>
                   </div>
                 )}
               </div>
@@ -295,53 +321,171 @@ const OverviewTab = ({
          onDelete={onDeleteMilestone}
          onBulkDelete={async (ids) => { for(const mid of ids) await onDeleteMilestone(mid); }}
         />
-        <TeamCard 
-           members={members} 
-           canManage={canManage}
-           onAdd={onAddMember}
-           onUpdateRole={onUpdateMemberRole}
-           onRemove={onRemoveMember}
-           onSearch={onSearchUsers}
-           onAddRedirect={onAddRedirect}
-        />
+        <TeamMembersOverview members={teamMembers} loading={loading} onOpenTeamTab={onAddRedirect} />
+        <div className="glass-panel p-6 space-y-3">
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-fg-muted">
+            Your Access
+          </p>
+          <p className="text-sm text-fg-secondary">
+            You are currently working in this project as{" "}
+            <span className="font-bold text-primary">{currentMemberRole}</span>.
+          </p>
+        </div>
       </div>
+    </div>
+  );
+};
+
+const ProjectTeamTab = ({
+  project,
+  currentMemberRole,
+  currentUserId,
+}: {
+  project: Project;
+  currentMemberRole: ProjectRole;
+  currentUserId: string;
+}) => {
+  const {
+    members,
+    loading,
+    addMember,
+    updateRole,
+    deleteMember,
+    searchUsers,
+  } = useMembers(project.id);
+
+  const teamMembers = useMemo(
+    () =>
+      members.map((member) => ({
+        id: member.id,
+        user_id: member.user_id,
+        display_name: member.user_profiles?.display_name || "Member",
+        avatar_url: member.user_profiles?.avatar_url,
+        email: (member as any).user_profiles?.email,
+        role: member.role as any,
+      })),
+    [members]
+  );
+
+  const canManage =
+    currentUserId === project.user_id ||
+    currentMemberRole === "owner" ||
+    currentMemberRole === "admin";
+
+  if (loading) {
+    return (
+      <div className="max-w-3xl mx-auto py-16 flex items-center justify-center">
+        <InlineSpinner />
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto">
+      <TeamCard
+        members={teamMembers}
+        canManage={canManage}
+        onAdd={async (uid, role) => {
+          await addMember({ user_id: uid, role });
+        }}
+        onUpdateRole={async (id, role) => {
+          await updateRole({ id, role });
+        }}
+        onRemove={async (id) => {
+          await deleteMember(id);
+        }}
+        onSearch={searchUsers}
+      />
     </div>
   );
 };
 
 const ProjectManagerPage = () => {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
+  const [, setSearchParams] = useSearchParams();
   const { user } = useAppStore();
 
   const [project, setProject] = useState<Project | null>(null);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [logs, setLogs] = useState<ProjectLog[]>([]);
-  const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [activeTab, setActiveTab] = useState<TabId>(() => {
+    const initialTab = new URLSearchParams(location.search).get("tab");
+    return isTabId(initialTab) ? initialTab : "overview";
+  });
   const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
   const [historyPage, setHistoryPage] = useState(1);
   const [historyPageSize] = useState(10);
   const [historyLogs, setHistoryLogs] = useState<ProjectLog[]>([]);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [manualRefreshPending, setManualRefreshPending] = useState(false);
+  const [workLogDraft, setWorkLogDraft] = useState({
+    completed: "",
+    next_steps: "",
+    blockers: "",
+    notes: "",
+  });
 
-  const {
-    members,
-    addMember,
-    updateRole: updateMemberRole,
-    deleteMember: removeMember,
-    searchUsers: searchUsersApi
-  } = useMembers(id);
+  useEffect(() => {
+    if (!id) return;
+    const stored = localStorage.getItem(`worklog-draft-${id}`);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        setWorkLogDraft({
+          completed: parsed.completed ?? "",
+          next_steps: parsed.next_steps ?? "",
+          blockers: parsed.blockers ?? "",
+          notes: parsed.notes ?? "",
+        });
+      } catch {
+        // ignore malformed
+      }
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    localStorage.setItem(`worklog-draft-${id}`, JSON.stringify(workLogDraft));
+  }, [id, workLogDraft]);
 
   const currentMemberRole = useMemo(() => {
-    const member = members.find(m => m.user_id === user?.id);
-    if (!member && project?.user_id === user?.id) return 'owner';
-    return (member?.role as ProjectRole) || 'viewer';
-  }, [members, user, project]);
+    if (project?.user_id === user?.id) return "owner";
+    return (project?.access_role as ProjectRole) || "viewer";
+  }, [project, user]);
+
+  const milestoneItems = useMemo(
+    () => milestones.map((milestone) => ({ ...milestone, item_type: "milestone" } as any)),
+    [milestones]
+  );
+
+  useEffect(() => {
+    const tabFromUrl = new URLSearchParams(location.search).get("tab");
+    if (isTabId(tabFromUrl) && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [location.search, activeTab]);
+
+  const handleTabChange = useCallback(
+    (tab: TabId) => {
+      if (tab === activeTab) return;
+      setActiveTab(tab);
+      setSearchParams((currentParams) => {
+        const nextParams = new URLSearchParams(currentParams);
+        nextParams.set("tab", tab);
+        return nextParams;
+      });
+    },
+    [activeTab, setSearchParams]
+  );
 
   const loadAll = useCallback(async () => {
     if (!id || !user) return;
     setLoading(true);
+    setPageError(null);
     try {
       const [pRes, mRes, tRes, lRes] = await Promise.all([
         getProjects(user.id),
@@ -350,13 +494,26 @@ const ProjectManagerPage = () => {
         getProjectLogs(id),
       ]);
 
-      const foundProject = (pRes.data as Project[]).find(p => p.id === id);
-      if (foundProject) setProject(foundProject);
+      if (pRes.error) throw new Error(pRes.error.message);
+      if (mRes.error) throw new Error(mRes.error.message);
+      if (tRes.error) throw new Error(tRes.error.message);
+      if (lRes.error) throw new Error(lRes.error.message);
+
+      const foundProject = (pRes.data ?? []).find((projectItem) => projectItem.id === id) ?? null;
+      if (!foundProject) {
+        setProject(null);
+        setPageError("Project not found, or you no longer have access to it.");
+        return;
+      }
+
+      setProject(foundProject);
       setMilestones(mRes.data || []);
       setTasks(tRes.data || []);
       setLogs(lRes.data || []);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Load failed", err);
+      setProject(null);
+      setPageError(err?.message ?? "Failed to load the project.");
     } finally {
       setLoading(false);
     }
@@ -384,6 +541,18 @@ const ProjectManagerPage = () => {
     }
   }, [activeTab, loadHistory]);
 
+  const handleManualRefresh = useCallback(async () => {
+    setManualRefreshPending(true);
+    try {
+      await loadAll();
+      if (activeTab === "history") {
+        await loadHistory(historyPage);
+      }
+    } finally {
+      setManualRefreshPending(false);
+    }
+  }, [activeTab, historyPage, loadAll, loadHistory]);
+
   const handleLogSubmit = async (payload: any) => {
     if (!project || !user) return;
     const insertPayload = {
@@ -398,6 +567,7 @@ const ProjectManagerPage = () => {
     const updatedLogs = await getProjectLogs(project.id);
     if (updatedLogs.error) throw updatedLogs.error;
     setLogs(updatedLogs.data || []);
+    setWorkLogDraft({ completed: "", next_steps: "", blockers: "", notes: "" });
     if (activeTab === "history") await loadHistory(historyPage);
   };
 
@@ -474,30 +644,21 @@ const ProjectManagerPage = () => {
             milestones={milestones}
             logs={logs}
             onLogSubmit={handleLogSubmit}
+            workLogDraft={workLogDraft}
+            onWorkLogDraftChange={setWorkLogDraft}
             userId={user.id}
             onAddMilestone={handleAddMilestone}
             onUpdateMilestone={handleUpdateMilestone}
             onDeleteMilestone={handleDeleteMilestone}
-            members={members.map(m => ({
-               id: m.id,
-               user_id: m.user_id,
-               display_name: m.user_profiles?.display_name || 'Member',
-               email: (m as any).user_profiles?.email,
-               role: m.role as any
-            }))}
             currentMemberRole={currentMemberRole}
-            onAddMember={async (uid, role) => { await addMember({ user_id: uid, role }); }}
-            onUpdateMemberRole={async (id, role) => { await updateMemberRole({ id, role }); }}
-            onRemoveMember={async (id) => { await removeMember(id); }}
-            onSearchUsers={searchUsersApi}
-            onAddRedirect={() => setActiveTab('team')}
+            onAddRedirect={() => handleTabChange("team")}
           />
         );
       case "milestones":
         return (
           <div className="max-w-4xl mx-auto">
              <MilestonesCard
-                milestones={milestones.map(m => ({ ...m, item_type: 'milestone' } as any))}
+                milestones={milestoneItems}
                 projectId={project.id}
                 userId={user.id}
                 onAdd={handleAddMilestone}
@@ -511,13 +672,13 @@ const ProjectManagerPage = () => {
         if (milestones.length === 0) {
           return (
             <div className="max-w-3xl mx-auto py-24 flex flex-col items-center justify-center text-center space-y-6">
-               <div className="w-20 h-20 bg-slate-900 rounded-3xl flex items-center justify-center border border-slate-800 text-3xl shadow-xl">🔒</div>
+               <div className="w-20 h-20 bg-panel rounded-3xl flex items-center justify-center border border-stroke text-3xl shadow-xl">🔒</div>
                <div className="space-y-2">
-                  <h3 className="text-xl font-bold text-slate-100 italic">Project Structure Required</h3>
-                  <p className="text-slate-500 max-w-sm">Tasks must be linked to a strategic milestone. Create your first milestone to unlock this project stream.</p>
+                  <h3 className="text-xl font-bold text-fg italic">Project Structure Required</h3>
+                  <p className="text-fg-muted max-w-sm">Tasks must be linked to a strategic milestone. Create your first milestone to unlock this project stream.</p>
                </div>
-               <button 
-                onClick={() => setActiveTab('milestones')}
+                <button 
+                onClick={() => handleTabChange('milestones')}
                 className="btn-primary py-3 px-8 font-bold text-sm tracking-wide"
                >
                   Go to Milestones →
@@ -528,7 +689,7 @@ const ProjectManagerPage = () => {
         return (
           <div className="max-w-5xl mx-auto space-y-8">
             <div className="flex items-center justify-between px-2">
-                 <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">{milestones.length} Milestone Tracks</h3>
+                 <h3 className="text-xs font-bold text-fg-muted uppercase tracking-widest">{milestones.length} Milestone Tracks</h3>
                  <span className="text-[10px] text-primary font-bold bg-primary/10 px-3 py-1 rounded-full border border-primary/20">Unlocked</span>
             </div>
             {milestones.map(m => (
@@ -536,9 +697,9 @@ const ProjectManagerPage = () => {
                   <div className="flex items-center justify-between px-2">
                     <div className="flex items-center gap-3">
                       <span className={`w-2 h-2 rounded-full ${m.status === 'completed' ? 'bg-emerald-500' : 'bg-primary'}`} />
-                      <h3 className="font-bold text-slate-200">{m.title}</h3>
+                      <h3 className="font-bold text-fg-secondary">{m.title}</h3>
                     </div>
-                    <span className="text-[10px] text-slate-500 font-mono tracking-widest uppercase">Tasks: {tasks.filter(t => t.milestone_id === m.id).length}</span>
+                    <span className="text-[10px] text-fg-muted font-mono tracking-widest uppercase">Tasks: {tasks.filter(t => t.milestone_id === m.id).length}</span>
                   </div>
                   <TasksPanel
                     tasks={tasks.filter(t => t.milestone_id === m.id)}
@@ -596,22 +757,11 @@ const ProjectManagerPage = () => {
         );
       case "team":
         return (
-          <div className="max-w-3xl mx-auto">
-            <TeamCard 
-              members={members.map(m => ({
-                 id: m.id,
-                 user_id: m.user_id,
-                 display_name: m.user_profiles?.display_name || 'Member',
-                 email: (m as any).user_profiles?.email,
-                 role: m.role as any
-              }))} 
-              canManage={user.id === project.user_id || currentMemberRole === 'owner' || currentMemberRole === 'admin'}
-              onAdd={async (uid, role) => { await addMember({ user_id: uid, role }); }}
-              onUpdateRole={async (id, role) => { await updateMemberRole({ id, role }); }}
-              onRemove={async (id) => { await removeMember(id); }}
-              onSearch={searchUsersApi}
-            />
-          </div>
+          <ProjectTeamTab
+            project={project}
+            currentMemberRole={currentMemberRole}
+            currentUserId={user.id}
+          />
         );
       case "history":
         return (
@@ -620,9 +770,9 @@ const ProjectManagerPage = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-base">🕘</span>
-                  <h3 className="font-semibold text-slate-200 text-sm">History</h3>
+                  <h3 className="font-semibold text-fg-secondary text-sm">History</h3>
                 </div>
-                <span className="text-xs text-slate-500">{historyTotal} logs</span>
+                <span className="text-xs text-fg-muted">{historyTotal} logs</span>
               </div>
 
               {historyLoading ? (
@@ -630,7 +780,7 @@ const ProjectManagerPage = () => {
                   <InlineSpinner />
                 </div>
               ) : historyLogs.length === 0 ? (
-                <div className="text-center py-8 text-slate-500 text-sm">
+                <div className="text-center py-8 text-fg-muted text-sm">
                   No logs yet.
                 </div>
               ) : (
@@ -676,13 +826,23 @@ const ProjectManagerPage = () => {
   };
 
   if (loading) return <div className="flex h-96 items-center justify-center"><InlineSpinner /></div>;
-  if (!project) return <div className="p-12 text-center text-slate-500">Project not found.</div>;
+  if (pageError) {
+    return (
+      <div className="rounded-2xl border border-rose-800/40 bg-rose-950/30 px-6 py-5 text-rose-100 space-y-3">
+        <h2 className="text-lg font-bold">Project page failed to load</h2>
+        <p className="text-sm text-rose-200">{pageError}</p>
+      </div>
+    );
+  }
+  if (!project) return <div className="p-12 text-center text-fg-muted">Project not found.</div>;
 
   return (
     <div className="space-y-6 max-w-full lg:max-w-7xl mx-auto w-full px-0 sm:px-2">
       <ProjectHeader 
         project={project} 
         progress={progress} 
+        onRefresh={handleManualRefresh}
+        refreshing={manualRefreshPending}
         onExport={async () => {
           try {
             const [mRes, tRes, lRes] = await Promise.all([
@@ -739,10 +899,10 @@ const ProjectManagerPage = () => {
             window.alert("Report generation failed. Check console for details.");
           }
         }} 
-        onAddUpdate={() => setActiveTab('overview')} 
+        onAddUpdate={() => handleTabChange('overview')} 
       />
 
-      <ProjectTabs activeTab={activeTab} onChange={setActiveTab} />
+      <ProjectTabs activeTab={activeTab} onChange={handleTabChange} />
 
       <div className="animate-in fade-in duration-300">
         {renderTab()}

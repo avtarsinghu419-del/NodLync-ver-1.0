@@ -9,6 +9,7 @@ export interface ProjectMember {
   created_at: string;
   user_profiles?: {
     display_name: string;
+    avatar_url?: string;
     email?: string; 
   };
 }
@@ -16,6 +17,7 @@ export interface ProjectMember {
 export interface UserSearchResult {
   id: string;
   display_name: string;
+  avatar_url?: string;
   email: string;
 }
 
@@ -25,6 +27,16 @@ export interface UserSearchResult {
  */
 export async function getProjectMembers(projectId: string): Promise<ApiResponse<ProjectMember[]>> {
   try {
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("id, user_id")
+      .eq("id", projectId)
+      .single();
+
+    if (projectError) throw projectError;
+
+    const ownerUserId = project.user_id;
+
     // 1. Fetch raw project members
     const { data: members, error: memError } = await supabase
       .from("project_members")
@@ -33,13 +45,13 @@ export async function getProjectMembers(projectId: string): Promise<ApiResponse<
 
     if (memError) throw memError;
 
-    if (!members || members.length === 0) return { data: [], error: null };
-
     // 2. Fetch related profiles for those users
-    const userIds = members.map((m: any) => m.user_id);
+    const userIds = Array.from(
+      new Set([ownerUserId, ...(members || []).map((member: any) => member.user_id)])
+    );
     const { data: profiles, error: profError } = await supabase
       .from("user_profiles")
-      .select("id, display_name")
+      .select("id, display_name, avatar_url")
       .in("id", userIds);
 
     if (profError) throw profError;
@@ -50,12 +62,23 @@ export async function getProjectMembers(projectId: string): Promise<ApiResponse<
       return acc;
     }, {});
 
-    const mergedMembers = members.map((m: any) => ({
+    const ownerMember = {
+      id: `owner-${projectId}`,
+      project_id: projectId,
+      user_id: ownerUserId,
+      role: "owner",
+      created_at: "",
+      user_profiles: profileMap[ownerUserId] || { display_name: "Project Owner" },
+    };
+
+    const mergedMembers = (members || [])
+      .filter((member: any) => member.user_id !== ownerUserId)
+      .map((m: any) => ({
       ...m,
       user_profiles: profileMap[m.user_id] || { display_name: "Unknown User" }
-    }));
+      }));
 
-    return { data: mergedMembers as ProjectMember[], error: null };
+    return { data: [ownerMember, ...mergedMembers] as ProjectMember[], error: null };
   } catch (err: any) {
     console.error("getProjectMembers error:", err);
     return { data: null, error: err };
@@ -79,7 +102,7 @@ export async function addProjectMember(payload: {
   // Then fetch profile for the new member
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("id, display_name")
+    .select("id, display_name, avatar_url")
     .eq("id", data.user_id)
     .single();
 
@@ -114,7 +137,7 @@ export async function searchUsers(query: string): Promise<ApiResponse<UserSearch
   
   const searchPromise = supabase
     .from("user_profiles")
-    .select("id, display_name")
+    .select("id, display_name, avatar_url")
     .ilike("display_name", `%${query}%`)
     .limit(10);
     

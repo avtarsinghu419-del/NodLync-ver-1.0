@@ -9,6 +9,8 @@ export interface Project {
   status: ProjectStatus;
   user_id: string;
   created_at?: string;
+  access_role?: "owner" | "admin" | "editor" | "viewer";
+  is_shared?: boolean;
 }
 
 export interface ProjectPayload {

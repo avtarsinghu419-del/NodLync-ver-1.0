@@ -21,7 +21,7 @@ export default function DashboardActiveProjectsOverview({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-lg">📌</span>
-          <h3 className="font-semibold text-slate-200 text-sm">Active Projects Overview</h3>
+          <h3 className="font-semibold text-fg-secondary text-sm">Active Projects Overview</h3>
         </div>
         <button
           type="button"
@@ -35,7 +35,7 @@ export default function DashboardActiveProjectsOverview({
 
       <div className="space-y-3">
         {rows.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-800/60 p-6 text-sm text-slate-500">
+          <div className="rounded-xl border border-dashed border-stroke/60 p-6 text-sm text-fg-muted">
             No active project stats yet.
           </div>
         ) : (
@@ -44,17 +44,17 @@ export default function DashboardActiveProjectsOverview({
             return (
               <div
                 key={r.project.id}
-                className="rounded-xl border border-slate-800/60 bg-slate-950/10 p-4 space-y-3"
+                className="rounded-xl border border-stroke/60 bg-panel/10 p-4 space-y-3"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex items-center gap-3">
-                      <span className="w-9 h-9 rounded-lg border border-slate-800/60 bg-surface/60 flex items-center justify-center text-sm">
+                      <span className="w-9 h-9 rounded-lg border border-stroke/60 bg-surface/60 flex items-center justify-center text-sm">
                         {r.project.name.trim().slice(0, 2).toUpperCase()}
                       </span>
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-slate-100 truncate">{r.project.name}</p>
-                        <p className="text-xs text-slate-400 truncate">{r.project.description || r.description || "No description"}</p>
+                        <p className="text-sm font-semibold text-fg truncate">{r.project.name}</p>
+                        <p className="text-xs text-fg-muted truncate">{r.project.description || r.description || "No description"}</p>
                       </div>
                     </div>
                   </div>
@@ -71,12 +71,12 @@ export default function DashboardActiveProjectsOverview({
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-500">Progress</span>
-                    <span className="text-xs text-slate-400 font-mono">{r.progress}%</span>
+                    <span className="text-xs text-fg-muted">Progress</span>
+                    <span className="text-xs text-fg-muted font-mono">{r.progress}%</span>
                   </div>
-                  <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div className="h-2 bg-surface rounded-full overflow-hidden">
                     <div
-                      className={`h-full transition-all duration-700 ${
+                      className={`h-full transition-[width] duration-700 ${
                         isDelayed ? "bg-rose-400" : "bg-primary"
                       }`}
                       style={{ width: `${Math.max(0, Math.min(100, r.progress))}%` }}

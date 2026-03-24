@@ -1,43 +1,82 @@
 import Sidebar from "../components/Sidebar";
+import RouteErrorBoundary from "../components/RouteErrorBoundary";
 import { Outlet } from "react-router-dom";
 import useAppStore from "../store/useAppStore";
 import { useEffect, useState } from "react";
 import { getProfile, getSettings } from "../api/settingsApi";
+import InlineSpinner from "../components/InlineSpinner";
 
 const AppLayout = () => {
   const user = useAppStore((s) => s.user);
   const setUserProfile = useAppStore((s) => s.setUserProfile);
   const setAppSettings = useAppStore((s) => s.setAppSettings);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [globalsLoading, setGlobalsLoading] = useState(true);
+  const [globalsError, setGlobalsError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setGlobalsLoading(false);
+      setGlobalsError(null);
+      return;
+    }
     const fetchGlobals = async () => {
-      const [pRes, sRes] = await Promise.all([
-        getProfile(user.id),
-        getSettings(user.id)
-      ]);
-      setUserProfile(pRes.data);
-      setAppSettings(sRes.data);
+      try {
+        setGlobalsLoading(true);
+        setGlobalsError(null);
+        const [pRes, sRes] = await Promise.all([
+          getProfile(user.id),
+          getSettings(user.id)
+        ]);
+        if (pRes.error || sRes.error) {
+          console.error("Failed to load global settings", {
+            profileError: pRes.error,
+            settingsError: sRes.error,
+          });
+          setGlobalsError(
+            pRes.error?.message ??
+              sRes.error?.message ??
+              "Failed to load your workspace settings."
+          );
+        }
+        setUserProfile(pRes.data);
+        setAppSettings(sRes.data);
+      } catch (error: any) {
+        console.error("Unexpected global settings failure", error);
+        setGlobalsError(error?.message ?? "Failed to load your workspace settings.");
+      } finally {
+        setGlobalsLoading(false);
+      }
     };
-    fetchGlobals();
+    void fetchGlobals();
   }, [user, setUserProfile, setAppSettings]);
 
   const appSettings = useAppStore((s) => s.appSettings);
 
   // Apply real theme globally
   useEffect(() => {
-    if (appSettings?.theme === "light") {
-      document.documentElement.classList.remove("dark");
-      document.documentElement.classList.add("light");
-    } else {
-      document.documentElement.classList.add("dark");
-      document.documentElement.classList.remove("light");
+    const root = document.documentElement;
+    const theme = appSettings?.theme === "light" ? "light" : "dark";
+    root.classList.remove("light", "dark");
+    root.classList.add(theme);
+    try {
+      window.localStorage.setItem("theme", theme);
+    } catch {
+      // ignore
     }
   }, [appSettings?.theme]);
 
+  if (globalsLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background text-fg-secondary gap-3">
+        <InlineSpinner />
+        <span>Loading workspace...</span>
+      </div>
+    );
+  }
+
   return (
-    <div className={`flex h-screen text-slate-100 overflow-hidden ${appSettings?.theme === "light" ? "bg-slate-50 text-slate-900" : "bg-background"}`}>
+    <div className="flex h-screen overflow-hidden bg-background text-fg">
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div 
@@ -53,14 +92,14 @@ const AppLayout = () => {
 
       <main className="flex-1 flex flex-col h-full bg-background relative z-0 min-w-0">
         {/* Mobile Header with Toggle */}
-        <header className="lg:hidden flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-surface/50 backdrop-blur-md sticky top-0 z-30">
+        <header className="lg:hidden flex items-center justify-between px-6 py-4 border-b border-stroke bg-surface/50 backdrop-blur-md sticky top-0 z-30">
           <div className="flex items-center gap-3">
              <img src="/favicon.svg" alt="Logo" className="w-8 h-8" />
              <span className="font-bold tracking-tight">NodLync</span>
           </div>
           <button 
             onClick={() => setSidebarOpen(true)}
-            className="p-2 hover:bg-slate-800 rounded-lg text-slate-300"
+            className="p-2 hover:bg-panel rounded-lg text-fg-secondary"
             aria-label="Open menu"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -71,7 +110,14 @@ const AppLayout = () => {
 
         <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-6 custom-scrollbar">
           <div className="max-w-[1600px] mx-auto w-full">
-            <Outlet />
+            {globalsError && (
+              <div className="mb-4 rounded-2xl border border-rose-800/40 bg-rose-950/30 px-5 py-4 text-sm text-rose-200">
+                {globalsError}
+              </div>
+            )}
+            <RouteErrorBoundary>
+              <Outlet />
+            </RouteErrorBoundary>
           </div>
         </div>
       </main>

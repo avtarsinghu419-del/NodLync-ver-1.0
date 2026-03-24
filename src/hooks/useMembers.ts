@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   getProjectMembers, 
@@ -59,12 +60,29 @@ export function useMembers(projectId?: string) {
     },
   });
 
+  const addMember = useCallback(
+    (payload: { user_id: string; role: string }) => addMemberMutation.mutateAsync(payload),
+    [addMemberMutation]
+  );
+
+  const updateRole = useCallback(
+    (payload: { id: string; role: string }) => updateRoleMutation.mutateAsync(payload),
+    [updateRoleMutation]
+  );
+
+  const deleteMember = useCallback(
+    (id: string) => deleteMemberMutation.mutateAsync(id),
+    [deleteMemberMutation]
+  );
+
+  const searchUsers = useCallback((query: string) => searchUsersApi(query), []);
+
   return {
     members: membersQuery.data ?? [],
     loading: membersQuery.isLoading,
-    addMember: (p: { user_id: string; role: string }) => addMemberMutation.mutateAsync(p),
-    updateRole: (p: { id: string; role: string }) => updateRoleMutation.mutateAsync(p),
-    deleteMember: (id: string) => deleteMemberMutation.mutateAsync(id),
-    searchUsers: (q: string) => searchUsersApi(q),
+    addMember,
+    updateRole,
+    deleteMember,
+    searchUsers,
   };
 }

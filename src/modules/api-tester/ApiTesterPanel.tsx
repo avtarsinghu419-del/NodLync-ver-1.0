@@ -642,7 +642,7 @@ const ApiTesterPanel = () => {
         <div className="px-5 pt-5 space-y-4">
           <div className="flex flex-col md:flex-row gap-3">
             <select
-              className="w-full md:w-32 rounded-md border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full md:w-32 rounded-md border border-stroke bg-panel/80 px-3 py-2 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-primary"
               value={method}
               onChange={(e) => setMethod(e.target.value as HttpMethod)}
             >
@@ -653,7 +653,7 @@ const ApiTesterPanel = () => {
               <option value="DELETE">DELETE</option>
             </select>
             <input
-              className="flex-1 rounded-md border border-slate-700 bg-surface px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+              className="flex-1 rounded-md border border-stroke bg-surface px-3 py-2 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-primary font-mono"
               placeholder="https://api.example.com/resource"
               value={url}
               onChange={(e) => handleUrlChange(e.target.value)}
@@ -680,7 +680,7 @@ const ApiTesterPanel = () => {
             </button>
           </div>
           {finalUrl && finalUrl !== url && (
-            <p className="text-[11px] text-slate-500 font-mono truncate">
+            <p className="text-[11px] text-fg-muted font-mono truncate">
               Final URL: {finalUrl}
             </p>
           )}
@@ -715,14 +715,14 @@ const ApiTesterPanel = () => {
 
       {/* Response viewer */}
       <div className="glass-panel flex flex-col overflow-hidden">
-        <div className="px-5 pt-5 pb-3 border-b border-slate-800 flex items-center justify-between gap-3">
-          <div className="inline-flex rounded-lg bg-slate-900/70 border border-slate-800 text-xs overflow-hidden">
+        <div className="px-5 pt-5 pb-3 border-b border-stroke flex items-center justify-between gap-3">
+          <div className="inline-flex rounded-lg bg-panel/70 border border-stroke text-xs overflow-hidden">
             <button
               type="button"
-              className={`px-4 py-2 border-r border-slate-800 ${
+              className={`px-4 py-2 border-r border-stroke ${
                 rightTab === "response"
-                  ? "bg-slate-800 text-slate-100"
-                  : "text-slate-400 hover:text-slate-100"
+                  ? "bg-surface text-fg"
+                  : "text-fg-muted hover:text-fg"
               }`}
               onClick={() => setRightTab("response")}
             >
@@ -732,8 +732,8 @@ const ApiTesterPanel = () => {
               type="button"
               className={`px-4 py-2 ${
                 rightTab === "code"
-                  ? "bg-slate-800 text-slate-100"
-                  : "text-slate-400 hover:text-slate-100"
+                  ? "bg-surface text-fg"
+                  : "text-fg-muted hover:text-fg"
               }`}
               onClick={() => setRightTab("code")}
             >
@@ -758,14 +758,14 @@ const ApiTesterPanel = () => {
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {rightTab === "response" ? (
             !response ? (
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-fg-muted">
                 Send a request to see the response here.
               </p>
             ) : (
               <>
                 <div className="flex flex-wrap items-center gap-3 text-sm">
                   {typeof response.status === "number" ? (
-                    <span className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/80 px-3 py-1 text-xs font-medium">
+                    <span className="inline-flex items-center gap-2 rounded-full border border-stroke bg-panel/80 px-3 py-1 text-xs font-medium">
                       <span className="h-2 w-2 rounded-full bg-emerald-400" />
                       Status:{" "}
                       <span className="font-mono">
@@ -774,7 +774,7 @@ const ApiTesterPanel = () => {
                     </span>
                   ) : null}
                   {typeof response.durationMs === "number" ? (
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-fg-muted">
                       Time:{" "}
                       <span className="font-mono">
                         {Math.round(response.durationMs)} ms
@@ -791,13 +791,13 @@ const ApiTesterPanel = () => {
 
                 {response.headers ? (
                   <div>
-                    <p className="text-xs font-semibold text-slate-300 mb-1">
+                    <p className="text-xs font-semibold text-fg-secondary mb-1">
                       Headers
                     </p>
-                    <div className="rounded-md border border-slate-800 bg-slate-950/60 max-h-40 overflow-auto text-[11px] font-mono text-slate-300 px-3 py-2 space-y-0.5">
+                    <div className="rounded-md border border-stroke bg-panel/60 max-h-40 overflow-auto text-[11px] font-mono text-fg-secondary px-3 py-2 space-y-0.5">
                       {Object.entries(response.headers).map(([k, v]) => (
                         <div key={k} className="flex gap-2">
-                          <span className="text-slate-500 min-w-[140px]">{k}:</span>
+                          <span className="text-fg-muted min-w-[140px]">{k}:</span>
                           <span className="flex-1 break-all">{v}</span>
                         </div>
                       ))}
@@ -806,10 +806,10 @@ const ApiTesterPanel = () => {
                 ) : null}
 
                 <div>
-                  <p className="text-xs font-semibold text-slate-300 mb-1">
+                  <p className="text-xs font-semibold text-fg-secondary mb-1">
                     Body
                   </p>
-                  <pre className="rounded-md border border-slate-800 bg-slate-950/70 max-h-[320px] overflow-auto text-xs font-mono text-slate-100 px-3 py-2 whitespace-pre-wrap break-words">
+                  <pre className="rounded-md border border-stroke bg-panel/70 max-h-[320px] overflow-auto text-xs font-mono text-fg px-3 py-2 whitespace-pre-wrap break-words">
                     {response.bodyPreview || "<empty>"}
                   </pre>
                 </div>
@@ -817,13 +817,13 @@ const ApiTesterPanel = () => {
             )
           ) : (
             <div className="space-y-3">
-              <div className="inline-flex rounded-lg bg-slate-900/70 border border-slate-800 text-xs overflow-hidden">
+              <div className="inline-flex rounded-lg bg-panel/70 border border-stroke text-xs overflow-hidden">
                 <button
                   type="button"
-                  className={`px-4 py-2 border-r border-slate-800 ${
+                  className={`px-4 py-2 border-r border-stroke ${
                     codeLang === "curl"
-                      ? "bg-slate-800 text-slate-100"
-                      : "text-slate-400 hover:text-slate-100"
+                      ? "bg-surface text-fg"
+                      : "text-fg-muted hover:text-fg"
                   }`}
                   onClick={() => setCodeLang("curl")}
                 >
@@ -831,10 +831,10 @@ const ApiTesterPanel = () => {
                 </button>
                 <button
                   type="button"
-                  className={`px-4 py-2 border-r border-slate-800 ${
+                  className={`px-4 py-2 border-r border-stroke ${
                     codeLang === "node"
-                      ? "bg-slate-800 text-slate-100"
-                      : "text-slate-400 hover:text-slate-100"
+                      ? "bg-surface text-fg"
+                      : "text-fg-muted hover:text-fg"
                   }`}
                   onClick={() => setCodeLang("node")}
                 >
@@ -842,10 +842,10 @@ const ApiTesterPanel = () => {
                 </button>
                 <button
                   type="button"
-                  className={`px-4 py-2 border-r border-slate-800 ${
+                  className={`px-4 py-2 border-r border-stroke ${
                     codeLang === "python"
-                      ? "bg-slate-800 text-slate-100"
-                      : "text-slate-400 hover:text-slate-100"
+                      ? "bg-surface text-fg"
+                      : "text-fg-muted hover:text-fg"
                   }`}
                   onClick={() => setCodeLang("python")}
                 >
@@ -855,8 +855,8 @@ const ApiTesterPanel = () => {
                   type="button"
                   className={`px-4 py-2 ${
                     codeLang === "php"
-                      ? "bg-slate-800 text-slate-100"
-                      : "text-slate-400 hover:text-slate-100"
+                      ? "bg-surface text-fg"
+                      : "text-fg-muted hover:text-fg"
                   }`}
                   onClick={() => setCodeLang("php")}
                 >
@@ -865,11 +865,11 @@ const ApiTesterPanel = () => {
               </div>
 
               {!url.trim() ? (
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-fg-muted">
                   Enter a URL to generate code.
                 </p>
               ) : (
-                <pre className="rounded-md border border-slate-800 bg-slate-950/70 max-h-[520px] overflow-auto text-xs font-mono text-slate-100 px-3 py-2 whitespace-pre-wrap break-words">
+                <pre className="rounded-md border border-stroke bg-panel/70 max-h-[520px] overflow-auto text-xs font-mono text-fg px-3 py-2 whitespace-pre-wrap break-words">
                   {generatedCode || "// Unable to generate code for this input"}
                 </pre>
               )}
@@ -934,32 +934,32 @@ const Tabs = ({
 
   return (
     <>
-      <div className="inline-flex rounded-lg bg-slate-900/70 border border-slate-800 text-xs mb-3 overflow-hidden">
+      <div className="inline-flex rounded-lg bg-panel/70 border border-stroke text-xs mb-3 overflow-hidden">
         <button
-          className={`px-4 py-2 border-r border-slate-800 ${
+          className={`px-4 py-2 border-r border-stroke ${
             activeTab === "params"
-              ? "bg-slate-800 text-slate-100"
-              : "text-slate-400 hover:text-slate-100"
+              ? "bg-surface text-fg"
+              : "text-fg-muted hover:text-fg"
           }`}
           onClick={() => setActiveTab("params")}
         >
           Params
         </button>
         <button
-          className={`px-4 py-2 border-r border-slate-800 ${
+          className={`px-4 py-2 border-r border-stroke ${
             activeTab === "headers"
-              ? "bg-slate-800 text-slate-100"
-              : "text-slate-400 hover:text-slate-100"
+              ? "bg-surface text-fg"
+              : "text-fg-muted hover:text-fg"
           }`}
           onClick={() => setActiveTab("headers")}
         >
           Headers
         </button>
         <button
-          className={`px-4 py-2 border-r border-slate-800 ${
+          className={`px-4 py-2 border-r border-stroke ${
             activeTab === "auth"
-              ? "bg-slate-800 text-slate-100"
-              : "text-slate-400 hover:text-slate-100"
+              ? "bg-surface text-fg"
+              : "text-fg-muted hover:text-fg"
           }`}
           onClick={() => setActiveTab("auth")}
         >
@@ -968,8 +968,8 @@ const Tabs = ({
         <button
           className={`px-4 py-2 ${
             activeTab === "body"
-              ? "bg-slate-800 text-slate-100"
-              : "text-slate-400 hover:text-slate-100"
+              ? "bg-surface text-fg"
+              : "text-fg-muted hover:text-fg"
           }`}
           onClick={() => setActiveTab("body")}
         >
@@ -1001,13 +1001,13 @@ const Tabs = ({
         {activeTab === "auth" && (
           <div className="space-y-4">
             <div className="flex flex-col gap-2 text-sm">
-              <label className="font-medium text-slate-200">Auth Type</label>
-              <div className="inline-flex rounded-md bg-slate-900/70 border border-slate-800 overflow-hidden text-xs">
+              <label className="font-medium text-fg-secondary">Auth Type</label>
+              <div className="inline-flex rounded-md bg-panel/70 border border-stroke overflow-hidden text-xs">
                 <button
-                  className={`px-4 py-2 border-r border-slate-800 ${
+                  className={`px-4 py-2 border-r border-stroke ${
                     authMode === "none"
-                      ? "bg-slate-800 text-slate-100"
-                      : "text-slate-400 hover:text-slate-100"
+                      ? "bg-surface text-fg"
+                      : "text-fg-muted hover:text-fg"
                   }`}
                   onClick={() => setAuthMode("none")}
                   type="button"
@@ -1017,8 +1017,8 @@ const Tabs = ({
                 <button
                   className={`px-4 py-2 ${
                     authMode === "bearer"
-                      ? "bg-slate-800 text-slate-100"
-                      : "text-slate-400 hover:text-slate-100"
+                      ? "bg-surface text-fg"
+                      : "text-fg-muted hover:text-fg"
                   }`}
                   onClick={() => setAuthMode("bearer")}
                   type="button"
@@ -1029,14 +1029,14 @@ const Tabs = ({
             </div>
             {authMode === "bearer" && (
               <div className="space-y-1 text-sm">
-                <label className="text-slate-300">Token</label>
+                <label className="text-fg-secondary">Token</label>
                 <input
-                  className="w-full rounded-md border border-slate-700 bg-surface px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                  className="w-full rounded-md border border-stroke bg-surface px-3 py-2 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-primary font-mono"
                   placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
                   value={bearerToken}
                   onChange={(e) => setBearerToken(e.target.value)}
                 />
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[11px] text-fg-muted">
                   Will be sent as <span className="font-mono">Authorization: Bearer &lt;token&gt;</span>.
                 </p>
               </div>
@@ -1046,7 +1046,7 @@ const Tabs = ({
         {activeTab === "body" && (
           <div className="flex flex-col h-full gap-2">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-slate-200">JSON Body</span>
+              <span className="text-sm font-medium text-fg-secondary">JSON Body</span>
               {!["POST", "PUT", "PATCH"].includes(method) && (
                 <span className="text-[11px] text-amber-400">
                   Only used for POST, PUT, PATCH
@@ -1054,7 +1054,7 @@ const Tabs = ({
               )}
             </div>
             <textarea
-              className="flex-1 min-h-[160px] rounded-md border border-slate-700 bg-slate-950/70 px-3 py-2 text-xs font-mono text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+              className="flex-1 min-h-[160px] rounded-md border border-stroke bg-panel/70 px-3 py-2 text-xs font-mono text-fg focus:outline-none focus:ring-1 focus:ring-primary resize-none"
               value={body}
               onChange={(e) => setBody(e.target.value)}
               spellCheck={false}
@@ -1062,7 +1062,7 @@ const Tabs = ({
             {jsonError ? (
               <p className="text-[11px] text-rose-400">JSON error: {jsonError}</p>
             ) : (
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-fg-muted">
                 Paste raw JSON here. It will be validated before sending.
               </p>
             )}
@@ -1105,7 +1105,7 @@ const KeyValueEditor = ({
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-medium text-slate-200">{label}</span>
+        <span className="text-sm font-medium text-fg-secondary">{label}</span>
         <button
           type="button"
           className="text-xs text-primary hover:text-sky-300"
@@ -1114,8 +1114,8 @@ const KeyValueEditor = ({
           + Add row
         </button>
       </div>
-      <div className="rounded-md border border-slate-800 bg-slate-950/40 overflow-hidden">
-        <div className="grid grid-cols-[32px,1.5fr,1.5fr,40px] text-[11px] uppercase tracking-[0.16em] text-slate-500 border-b border-slate-800 px-3 py-2">
+      <div className="rounded-md border border-stroke bg-panel/40 overflow-hidden">
+        <div className="grid grid-cols-[32px,1.5fr,1.5fr,40px] text-[11px] uppercase tracking-[0.16em] text-fg-muted border-b border-stroke px-3 py-2">
           <span>On</span>
           <span>Key</span>
           <span>Value</span>
@@ -1125,7 +1125,7 @@ const KeyValueEditor = ({
           {rows.map((row) => (
             <div
               key={row.id}
-              className="grid grid-cols-[32px,1.5fr,1.5fr,40px] items-center gap-2 px-3 py-1.5 border-b border-slate-900/60 last:border-b-0 text-xs"
+              className="grid grid-cols-[32px,1.5fr,1.5fr,40px] items-center gap-2 px-3 py-1.5 border-b border-stroke/60 last:border-b-0 text-xs"
             >
               <input
                 type="checkbox"
@@ -1136,7 +1136,7 @@ const KeyValueEditor = ({
                 className="h-3.5 w-3.5 accent-primary justify-self-center"
               />
               <input
-                className="w-full bg-transparent border border-slate-800 rounded px-2 py-1 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-slate-600"
+                className="w-full bg-transparent border border-stroke rounded px-2 py-1 text-xs text-fg focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-fg-muted"
                 placeholder="key"
                 value={row.key}
                 onChange={(e) =>
@@ -1144,7 +1144,7 @@ const KeyValueEditor = ({
                 }
               />
               <input
-                className="w-full bg-transparent border border-slate-800 rounded px-2 py-1 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-slate-600"
+                className="w-full bg-transparent border border-stroke rounded px-2 py-1 text-xs text-fg focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-fg-muted"
                 placeholder="value"
                 value={row.value}
                 onChange={(e) =>
@@ -1153,7 +1153,7 @@ const KeyValueEditor = ({
               />
               <button
                 type="button"
-                className="text-slate-600 hover:text-rose-400 text-base leading-none justify-self-center"
+                className="text-fg-muted hover:text-rose-400 text-base leading-none justify-self-center"
                 onClick={() => handleDeleteRow(rows, setRows, row.id)}
                 title="Delete row"
               >

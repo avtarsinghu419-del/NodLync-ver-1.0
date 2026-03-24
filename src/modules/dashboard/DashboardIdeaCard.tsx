@@ -26,12 +26,12 @@ export default function DashboardIdeaCard() {
     <div className="glass-panel p-5 space-y-4">
       <div className="flex items-center gap-2">
         <span className="text-lg">💡</span>
-        <h3 className="font-semibold text-slate-200 text-sm">Idea of the Day</h3>
+        <h3 className="font-semibold text-fg-secondary text-sm">Idea of the Day</h3>
       </div>
       
       <div className="bg-primary/5 border border-primary/20 rounded-xl p-4">
-        <h4 className="font-bold text-slate-100 text-sm mb-1">{todayIdea.title}</h4>
-        <p className="text-xs text-slate-400 leading-relaxed">{todayIdea.description}</p>
+        <h4 className="font-bold text-fg text-sm mb-1">{todayIdea.title}</h4>
+        <p className="text-xs text-fg-muted leading-relaxed">{todayIdea.description}</p>
       </div>
 
       <button

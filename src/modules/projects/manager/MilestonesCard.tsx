@@ -67,11 +67,11 @@ const MilestonesCard = ({ milestones, onAdd, onToggle, onDelete, onBulkDelete, b
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-base text-primary">🚩</span>
-          <h3 className="font-semibold text-slate-200 text-sm">Strategic Milestones</h3>
+          <h3 className="font-semibold text-fg-secondary text-sm">Milestones</h3>
         </div>
         <div className="flex items-center gap-2">
           {milestones.length > 0 && (
-            <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">{completedCount}/{milestones.length} Done</span>
+            <span className="text-[10px] font-mono text-fg-muted uppercase tracking-widest">{completedCount}/{milestones.length} Done</span>
           )}
           <button className="text-xs text-primary hover:text-primary/80 transition font-bold" onClick={() => setAdding((v) => !v)}>
             {adding ? "CANCEL" : "+ ADD"}
@@ -83,7 +83,7 @@ const MilestonesCard = ({ milestones, onAdd, onToggle, onDelete, onBulkDelete, b
         <div className="flex gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
           <input
             autoFocus
-            className="flex-1 rounded-lg border border-slate-700 bg-surface px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary transition placeholder:text-slate-600"
+            className="flex-1 rounded-lg border border-stroke bg-surface px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-primary transition placeholder:text-fg-muted"
             placeholder="Enter milestone name..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -94,7 +94,7 @@ const MilestonesCard = ({ milestones, onAdd, onToggle, onDelete, onBulkDelete, b
           />
           <input
             type="date"
-            className="w-36 rounded-lg border border-slate-700 bg-surface px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary transition placeholder:text-slate-600"
+            className="w-36 rounded-lg border border-stroke bg-surface px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-primary transition placeholder:text-fg-muted"
             value={deadline}
             onChange={(e) => setDeadline(e.target.value)}
             aria-label="Milestone deadline"
@@ -114,11 +114,11 @@ const MilestonesCard = ({ milestones, onAdd, onToggle, onDelete, onBulkDelete, b
       />
 
       {milestones.length === 0 ? (
-        <div className="py-12 flex flex-col items-center justify-center text-center space-y-4 border border-dashed border-slate-800 rounded-2xl bg-slate-900/10">
+        <div className="py-12 flex flex-col items-center justify-center text-center space-y-4 border border-dashed border-stroke rounded-2xl bg-panel/10">
            <span className="text-3xl opacity-20">🎯</span>
            <div className="space-y-1">
-              <p className="text-sm font-semibold text-slate-400">No Milestones Found</p>
-              <p className="text-xs text-slate-600">Break down your project into strategic goals.</p>
+              <p className="text-sm font-semibold text-fg-muted">No Milestones Found</p>
+              <p className="text-xs text-fg-muted">Break down your project into strategic goals.</p>
            </div>
            {!adding && (
               <button 
@@ -131,7 +131,7 @@ const MilestonesCard = ({ milestones, onAdd, onToggle, onDelete, onBulkDelete, b
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="flex items-center gap-3 text-[10px] uppercase font-bold tracking-widest text-slate-600 px-1">
+          <div className="flex items-center gap-3 text-[10px] uppercase font-bold tracking-widest text-fg-muted px-1">
             <IndeterminateCheckbox
               checked={pageState.checked}
               indeterminate={pageState.indeterminate}
@@ -145,30 +145,30 @@ const MilestonesCard = ({ milestones, onAdd, onToggle, onDelete, onBulkDelete, b
               const isCompleted = m.status === "completed";
               const isLoading = savingId === m.id;
               return (
-                <li key={m.id} className="flex items-center gap-3 group rounded-lg px-2 py-2 hover:bg-slate-800/30 transition border border-transparent hover:border-slate-800/50">
+                <li key={m.id} className="flex items-center gap-3 group rounded-lg px-2 py-2 hover:bg-surface/30 transition border border-transparent hover:border-stroke/50">
                   <input
                     type="checkbox"
                     checked={selection.isSelected(m.id)}
                     onChange={() => selection.toggleOne(m.id)}
-                    className="h-3.5 w-3.5 accent-primary rounded bg-slate-900 border-slate-700"
+                    className="h-3.5 w-3.5 accent-primary rounded bg-panel border-stroke"
                   />
-                  <span className={`flex-1 text-sm leading-snug font-medium ${isCompleted ? "line-through text-slate-600" : "text-slate-300"}`}>
+                  <span className={`flex-1 text-sm leading-snug font-medium ${isCompleted ? "line-through text-fg-muted" : "text-fg-secondary"}`}>
                     {m.title}
                   </span>
                   {m.deadline && (
-                    <span className="text-[10px] text-slate-500 font-mono opacity-80">
+                    <span className="text-[10px] text-fg-muted font-mono opacity-80">
                       Due {formatDeadline(m.deadline)}
                     </span>
                   )}
                   <button 
-                    className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-rose-500 transition-all p-1" 
+                    className="opacity-0 group-hover:opacity-100 text-fg-muted hover:text-rose-500 transition p-1" 
                     onClick={() => onDelete(m.id)} 
                     title="Delete Milestone"
                   >
                     🗑️
                   </button>
                   <button
-                    className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center transition border ${isCompleted ? "bg-emerald-500/10 border-emerald-500 text-emerald-500" : "bg-slate-900 border-slate-700 text-slate-600 hover:border-primary"} ${isLoading ? "opacity-50" : ""}`}
+                    className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center transition border ${isCompleted ? "bg-emerald-500/10 border-emerald-500 text-emerald-500" : "bg-panel border-stroke text-fg-muted hover:border-primary"} ${isLoading ? "opacity-50" : ""}`}
                     onClick={() => handleToggle(m)}
                     disabled={isLoading}
                     title={isCompleted ? "Mark not done" : "Mark done"}
@@ -178,7 +178,7 @@ const MilestonesCard = ({ milestones, onAdd, onToggle, onDelete, onBulkDelete, b
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                       </svg>
                     ) : (
-                      <div className="w-1.5 h-1.5 rounded-full bg-slate-700 group-white" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-surface group-white" />
                     )}
                   </button>
                 </li>
@@ -189,14 +189,14 @@ const MilestonesCard = ({ milestones, onAdd, onToggle, onDelete, onBulkDelete, b
       )}
 
       {milestones.length > 0 && (
-        <div className="pt-4 border-t border-slate-800/50 space-y-3">
+        <div className="pt-4 border-t border-stroke/50 space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Velocity</span>
+            <span className="text-[10px] text-fg-muted font-bold uppercase tracking-widest">Progress</span>
             <span className="text-xs font-bold text-primary tabular-nums">{Math.round((completedCount / milestones.length) * 100)}%</span>
           </div>
-          <div className="bg-slate-900 rounded-full h-1.5 overflow-hidden border border-slate-800">
+          <div className="bg-panel rounded-full h-1.5 overflow-hidden border border-stroke">
             <div 
-              className="h-full bg-gradient-to-r from-primary to-emerald-400 rounded-full transition-all duration-700" 
+              className="h-full bg-gradient-to-r from-primary to-emerald-400 rounded-full transition-[width] duration-700" 
               style={{ width: `${(completedCount / milestones.length) * 100}%` }} 
             />
           </div>

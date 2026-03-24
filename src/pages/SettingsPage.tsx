@@ -28,6 +28,12 @@ const SettingsPage = () => {
   
   const [activeTab, setActiveTab] = useState<"general" | "profile" | "logs" | "ai">("general");
   const [loadingProfile, setLoadingProfile] = useState(false);
+  const [loadingKeys, setLoadingKeys] = useState(false);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [clearingLogs, setClearingLogs] = useState(false);
+  const [savingSettingKey, setSavingSettingKey] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   
   // AI Keys state
   const [apiKeys, setApiKeys] = useState<any[]>([]);
@@ -35,6 +41,7 @@ const SettingsPage = () => {
   // Logs filters
   const [logStatusFilter, setLogStatusFilter] = useState<string>("all");
   const [logModuleFilter, setLogModuleFilter] = useState<string>("all");
+  const [logSortDir, setLogSortDir] = useState<"desc" | "asc">("desc");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -50,10 +57,17 @@ const SettingsPage = () => {
   useEffect(() => {
     if (!user) return;
     const fetchApiKeys = async () => {
-      const { data } = await supabase.from("api_key_items").select("*").eq("UserId", user.id);
+      setLoadingKeys(true);
+      setActionError(null);
+      const { data, error } = await supabase.from("api_key_items").select("*").eq("UserId", user.id);
+      if (error) {
+        console.error("Failed to load API keys", error);
+        setActionError(error.message ?? "Failed to load API keys.");
+      }
       if (data) setApiKeys(data);
+      setLoadingKeys(false);
     };
-    fetchApiKeys();
+    void fetchApiKeys();
   }, [user]);
 
   // Realtime Logs Subscription
@@ -62,13 +76,24 @@ const SettingsPage = () => {
     
     // Initial fetch of logs if empty
     if (appLogs.length === 0) {
+      setLoadingLogs(true);
       supabase.from("app_logs")
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(100)
         .then((res: any) => {
+          if (res.error) {
+            console.error("Failed to load logs", res.error);
+            setActionError(res.error.message ?? "Failed to load system logs.");
+          }
           if (res.data) setAppLogs(res.data);
+          setLoadingLogs(false);
+        })
+        .catch((error: any) => {
+          console.error("Failed to load logs", error);
+          setActionError(error?.message ?? "Failed to load system logs.");
+          setLoadingLogs(false);
         });
     }
 
@@ -95,13 +120,19 @@ const SettingsPage = () => {
     if (!user || !appSettings) return;
     
     // Optimistic update
+    const previousSettings = appSettings;
     const newSettings = { ...appSettings, [key]: value };
     setAppSettings(newSettings);
+    setSavingSettingKey(key);
+    setActionError(null);
     
     const { error } = await updateSettings(user.id, { [key]: value });
     if (error) {
-      alert(`Error updating ${key}: ` + error.message);
+      console.error(`Error updating ${key}`, error);
+      setAppSettings(previousSettings);
+      setActionError(`Failed to update ${key.replace(/_/g, " ")}: ${error.message}`);
     }
+    setSavingSettingKey(null);
   };
 
   const handleProfileNameChange = async (e: React.FocusEvent<HTMLInputElement>) => {
@@ -109,7 +140,12 @@ const SettingsPage = () => {
     const val = e.target.value.trim();
     if (val !== userProfile.display_name) {
       setLoadingProfile(true);
-      const { data } = await updateProfile(user.id, { display_name: val });
+      setActionError(null);
+      const { data, error } = await updateProfile(user.id, { display_name: val });
+      if (error) {
+        console.error("Failed to update profile name", error);
+        setActionError(error.message ?? "Failed to update your profile name.");
+      }
       if (data) setUserProfile(data);
       setLoadingProfile(false);
     }
@@ -122,11 +158,12 @@ const SettingsPage = () => {
     
     // Validate image
     if (!file.type.startsWith("image/")) {
-      alert("Please upload an image file.");
+      setActionError("Please upload an image file.");
       return;
     }
 
     setLoadingProfile(true);
+    setActionError(null);
     const filePath = `${user.id}/profile.jpg`;
 
     // Upload / upsert
@@ -135,7 +172,8 @@ const SettingsPage = () => {
       .upload(filePath, file, { cacheControl: "3600", upsert: true });
 
     if (uploadError) {
-      alert("Error uploading image: " + uploadError.message);
+      console.error("Error uploading image", uploadError);
+      setActionError("Error uploading image: " + uploadError.message);
       setLoadingProfile(false);
       return;
     }
@@ -150,7 +188,11 @@ const SettingsPage = () => {
     const cacheBusterUrl = `${publicData.publicUrl}?t=${Date.now()}`;
 
     // Update DB & store
-    const { data } = await updateProfile(user.id, { avatar_url: cacheBusterUrl });
+    const { data, error } = await updateProfile(user.id, { avatar_url: cacheBusterUrl });
+    if (error) {
+      console.error("Failed to save profile image", error);
+      setActionError(error.message ?? "Failed to save your profile image.");
+    }
     if (data) setUserProfile(data);
     setLoadingProfile(false);
   };
@@ -158,35 +200,68 @@ const SettingsPage = () => {
   // --- Actions ---
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    // Re-directing strictly out
-    window.location.href = "/login";
+    setLoggingOut(true);
+    setActionError(null);
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error("Logout failed", error);
+      setActionError(error.message ?? "Failed to log out.");
+      setLoggingOut(false);
+      return;
+    }
+    navigate("/login", { replace: true });
   };
 
   const handleClearLogs = async () => {
     if (!user) return;
     if (!window.confirm("Are you sure you want to clear all logs?")) return;
-    await clearLogs(user.id);
+    setClearingLogs(true);
+    setActionError(null);
+    const { error } = await clearLogs(user.id);
+    if (error) {
+      console.error("Failed to clear logs", error);
+      setActionError(error.message ?? "Failed to clear logs.");
+      setClearingLogs(false);
+      return;
+    }
     setAppLogs([]);
+    setClearingLogs(false);
   };
 
   const handleExportLogs = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appLogs, null, 2));
+    const blob = new Blob([JSON.stringify(appLogs, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
     const dlAnchorElem = document.createElement("a");
-    dlAnchorElem.setAttribute("href", dataStr);
+    dlAnchorElem.setAttribute("href", url);
     dlAnchorElem.setAttribute("download", "nodlync_logs.json");
     dlAnchorElem.click();
+    URL.revokeObjectURL(url);
   };
 
   // UI state for logs
-  const filteredLogs = appLogs.filter((log) => {
-    if (logStatusFilter !== "all" && log.status !== logStatusFilter) return false;
-    if (logModuleFilter !== "all" && log.action !== logModuleFilter) return false;
+  const normalizedLogs = [...appLogs]
+    .filter((log) => log?.created_at && (log?.message || log?.details))
+    .map((log) => ({
+      id: log.id,
+      type: (log.status ?? log.level ?? "info").toLowerCase(),
+      module: (log.action ?? log.module ?? "app").toLowerCase(),
+      message: log.message ?? (typeof log.details === "string" ? log.details : JSON.stringify(log.details)),
+      timestamp: log.created_at,
+    }))
+    .sort((a, b) =>
+      logSortDir === "desc"
+        ? a.timestamp < b.timestamp ? 1 : -1
+        : a.timestamp > b.timestamp ? 1 : -1
+    );
+
+  const filteredLogs = normalizedLogs.filter((log) => {
+    if (logStatusFilter !== "all" && log.type !== logStatusFilter) return false;
+    if (logModuleFilter !== "all" && log.module !== logModuleFilter) return false;
     return true;
   });
 
-  const uniqueModules = Array.from(new Set(appLogs.map((l) => l.action || "")));
-  const logsPagination = usePagination(filteredLogs);
+  const uniqueModules = Array.from(new Set(normalizedLogs.map((l) => l.module || "")));
+  const logsPagination = usePagination(filteredLogs, { initialPageSize: 20 });
   const apiKeysPagination = usePagination(apiKeys);
 
   return (
@@ -198,7 +273,7 @@ const SettingsPage = () => {
       />
 
       {/* Tabs Navigation */}
-      <div className="flex items-center gap-1 mb-6 border-b border-slate-800">
+      <div className="flex items-center gap-1 mb-6 border-b border-stroke">
         {[
           { id: "general", label: "General" },
           { id: "profile", label: "Profile" },
@@ -214,13 +289,25 @@ const SettingsPage = () => {
             className={`px-6 py-3 font-medium text-sm transition border-b-2 ${
               activeTab === tab.id
                 ? "text-primary border-primary bg-primary/5"
-                : "text-slate-400 border-transparent hover:text-slate-300 hover:bg-slate-800/50"
+                : "text-fg-muted border-transparent hover:text-fg-secondary hover:bg-surface/50"
             }`}
           >
             {tab.label}
           </button>
         ))}
       </div>
+
+      {actionError && (
+        <div className="mb-6 rounded-2xl border border-rose-800/40 bg-rose-950/30 px-5 py-4 text-sm text-rose-200 flex items-start justify-between gap-4">
+          <span>{actionError}</span>
+          <button
+            onClick={() => setActionError(null)}
+            className="text-rose-300 hover:text-white flex-shrink-0"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Tab Content */}
       <div className="flex-1 overflow-y-auto pb-12 custom-scrollbar">
@@ -234,63 +321,74 @@ const SettingsPage = () => {
             </div>
           ) : (
             <div className="glass-panel p-6 space-y-6 max-w-2xl animate-in fade-in">
-              <h2 className="text-lg font-bold text-slate-200 border-b border-slate-800 pb-2">Appearance & Behavior</h2>
+              <h2 className="text-lg font-bold text-fg-secondary border-b border-stroke pb-2">Appearance & Behavior</h2>
               
               <div className="space-y-4">
-                <label className="flex items-center justify-between p-3 bg-surface border border-slate-700 rounded-lg cursor-pointer hover:border-slate-500 transition">
+                <label className="flex items-center justify-between p-3 bg-surface border border-stroke rounded-lg cursor-pointer hover:border-stroke-strong transition">
                   <div>
-                    <span className="block text-sm font-semibold text-slate-200">Dark Theme</span>
-                    <span className="text-xs text-slate-400">Use dark mode across the application.</span>
+                    <span className="block text-sm font-semibold text-fg-secondary">Dark Theme</span>
+                    <span className="text-xs text-fg-muted">Use dark mode across the application.</span>
                   </div>
                   <input
                     type="checkbox"
                     className="w-5 h-5 accent-primary"
                     checked={appSettings.theme === "dark"}
                     onChange={(e) => handleSettingToggle("theme", e.target.checked ? "dark" : "light")}
+                    disabled={savingSettingKey === "theme"}
                   />
                 </label>
   
-                <label className="flex items-center justify-between p-3 bg-surface border border-slate-700 rounded-lg cursor-pointer hover:border-slate-500 transition">
+                <label className="flex items-center justify-between p-3 bg-surface border border-stroke rounded-lg cursor-pointer hover:border-stroke-strong transition">
                   <div>
-                    <span className="block text-sm font-semibold text-slate-200">Default Project View</span>
-                    <span className="text-xs text-slate-400">Load projects as lists or grids by default.</span>
+                    <span className="block text-sm font-semibold text-fg-secondary">Default Project View</span>
+                    <span className="text-xs text-fg-muted">Load projects as lists or grids by default.</span>
                   </div>
                   <select
-                    className="bg-slate-800 border-none text-sm text-slate-200 p-1.5 outline-none rounded"
+                    className="bg-surface border-none text-sm text-fg-secondary p-1.5 outline-none rounded"
                     value={appSettings.default_project_view || "list"}
                     onChange={(e) => handleSettingToggle("default_project_view", e.target.value)}
+                    disabled={savingSettingKey === "default_project_view"}
                   >
                     <option value="list">List View</option>
                     <option value="grid">Grid View</option>
                   </select>
                 </label>
   
-                <label className="flex items-center justify-between p-3 bg-surface border border-slate-700 rounded-lg cursor-pointer hover:border-slate-500 transition">
+                <label className="flex items-center justify-between p-3 bg-surface border border-stroke rounded-lg cursor-pointer hover:border-stroke-strong transition">
                   <div>
-                    <span className="block text-sm font-semibold text-slate-200">Push Notifications</span>
-                    <span className="text-xs text-slate-400">Receive in-app alerts and browser notifications.</span>
+                    <span className="block text-sm font-semibold text-fg-secondary">Push Notifications</span>
+                    <span className="text-xs text-fg-muted">Receive in-app alerts and browser notifications.</span>
                   </div>
                   <input
                     type="checkbox"
                     className="w-5 h-5 accent-primary"
                     checked={appSettings.notifications_enabled}
                     onChange={(e) => handleSettingToggle("notifications_enabled", e.target.checked)}
+                    disabled={savingSettingKey === "notifications_enabled"}
                   />
                 </label>
   
-                <label className="flex items-center justify-between p-3 bg-surface border border-slate-700 rounded-lg cursor-pointer hover:border-slate-500 transition">
+                <label className="flex items-center justify-between p-3 bg-surface border border-stroke rounded-lg cursor-pointer hover:border-stroke-strong transition">
                   <div>
-                    <span className="block text-sm font-semibold text-slate-200">Auto Updates</span>
-                    <span className="text-xs text-slate-400">Automatically update local caches in the background.</span>
+                    <span className="block text-sm font-semibold text-fg-secondary">Auto Updates</span>
+                    <span className="text-xs text-fg-muted">Automatically update local caches in the background.</span>
                   </div>
                   <input
                     type="checkbox"
                     className="w-5 h-5 accent-primary"
                     checked={appSettings.auto_update_enabled}
                     onChange={(e) => handleSettingToggle("auto_update_enabled", e.target.checked)}
+                    disabled={savingSettingKey === "auto_update_enabled"}
                   />
                 </label>
               </div>
+
+              {savingSettingKey && (
+                <div className="text-xs text-fg-muted flex items-center gap-2">
+                  <InlineSpinner />
+                  Saving {savingSettingKey.replace(/_/g, " ")}...
+                </div>
+              )}
             </div>
           )
         )}
@@ -298,12 +396,12 @@ const SettingsPage = () => {
         {/* ===================== PROFILE TAB ===================== */}
         {activeTab === "profile" && userProfile && (
           <div className="glass-panel p-6 space-y-8 max-w-2xl animate-in fade-in">
-            <h2 className="text-lg font-bold text-slate-200 border-b border-slate-800 pb-2">User Profile</h2>
+            <h2 className="text-lg font-bold text-fg-secondary border-b border-stroke pb-2">User Profile</h2>
             
             {/* Avatar Section */}
             <div className="flex items-center gap-6">
               <div 
-                className="w-24 h-24 rounded-full bg-surface border-2 border-slate-700 overflow-hidden flex items-center justify-center relative group cursor-pointer"
+                className="w-24 h-24 rounded-full bg-surface border-2 border-stroke overflow-hidden flex items-center justify-center relative group cursor-pointer"
                 onClick={() => fileInputRef.current?.click()}
               >
                 {loadingProfile ? (
@@ -328,43 +426,53 @@ const SettingsPage = () => {
                 onChange={handleImageUpload} 
               />
               <div>
-                <button onClick={() => fileInputRef.current?.click()} className="btn-ghost text-sm text-primary mb-1">
-                  Change Photo
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={loadingProfile}
+                  className="btn-ghost text-sm text-primary mb-1 disabled:opacity-50"
+                >
+                  {loadingProfile ? "Uploading..." : "Change Photo"}
                 </button>
-                <p className="text-xs text-slate-500">JPG, GIF or PNG. 1MB max.</p>
+                <p className="text-xs text-fg-muted">JPG, GIF or PNG. 1MB max.</p>
               </div>
             </div>
 
             <div className="space-y-5">
               <label className="block space-y-1">
-                <span className="text-sm text-slate-400 font-medium">Display Name</span>
+                <span className="text-sm text-fg-muted font-medium">Display Name</span>
                 <input
                   type="text"
-                  className="w-full bg-surface border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full bg-surface border border-stroke rounded-lg px-3 py-2.5 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-primary"
                   defaultValue={userProfile.display_name}
                   onBlur={handleProfileNameChange}
                   placeholder="Your name"
+                  disabled={loadingProfile}
                 />
-                <p className="text-xs text-slate-500 mt-1">Saves automatically when you click off the field.</p>
+                <p className="text-xs text-fg-muted mt-1">Saves automatically when you click off the field.</p>
               </label>
 
               <label className="block space-y-1">
-                <span className="text-sm text-slate-400 font-medium">Email Address (Read-only)</span>
+                <span className="text-sm text-fg-muted font-medium">Email Address (Read-only)</span>
                 <input
                   type="email"
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-500 cursor-not-allowed"
+                  className="w-full bg-panel border border-stroke rounded-lg px-3 py-2.5 text-sm text-fg-muted cursor-not-allowed"
                   value={user?.email || ""}
                   disabled
                 />
               </label>
             </div>
 
-            <div className="pt-6 border-t border-slate-800">
-              <button type="button" onClick={handleLogout} className="btn-ghost text-rose-400 hover:bg-rose-500/10 w-full flex items-center justify-center gap-2 font-bold py-3">
+            <div className="pt-6 border-t border-stroke">
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="btn-ghost text-rose-400 hover:bg-rose-500/10 w-full flex items-center justify-center gap-2 font-bold py-3 disabled:opacity-50"
+              >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
-                Securely Log Out
+                {loggingOut ? "Logging out..." : "Securely Log Out"}
               </button>
             </div>
           </div>
@@ -373,15 +481,15 @@ const SettingsPage = () => {
         {/* ===================== LOGS TAB ===================== */}
         {activeTab === "logs" && (
           <div className="glass-panel flex flex-col min-h-[500px] animate-in fade-in">
-            <div className="p-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-4 sticky top-0 bg-background/95 backdrop-blur z-10">
-              <div className="flex items-center gap-3">
+            <div className="p-4 border-b border-stroke-strong flex flex-wrap items-center justify-between gap-4 sticky top-0 bg-panel/95 backdrop-blur z-10">
+              <div className="flex items-center gap-2 flex-wrap">
                 <select
                   value={logStatusFilter}
                   onChange={(e) => {
                     setLogStatusFilter(e.target.value);
                     logsPagination.setCurrentPage(1);
                   }}
-                  className="bg-surface border border-slate-700 text-slate-200 text-sm rounded px-3 py-1.5 focus:outline-none focus:border-primary"
+                  className="bg-surface border border-stroke-strong text-fg-secondary text-sm rounded px-3 py-1.5 focus:outline-none focus:border-primary"
                 >
                   <option value="all">All Statuses</option>
                   <option value="success">Success</option>
@@ -395,12 +503,21 @@ const SettingsPage = () => {
                     setLogModuleFilter(e.target.value);
                     logsPagination.setCurrentPage(1);
                   }}
-                  className="bg-surface border border-slate-700 text-slate-200 text-sm rounded px-3 py-1.5 focus:outline-none focus:border-primary"
+                  className="bg-surface border border-stroke-strong text-fg-secondary text-sm rounded px-3 py-1.5 focus:outline-none focus:border-primary"
                 >
                   <option value="all">All Modules</option>
                   {uniqueModules.map((m) => (
                     <option key={m} value={m}>{m}</option>
                   ))}
+                </select>
+
+                <select
+                  value={logSortDir}
+                  onChange={(e) => setLogSortDir(e.target.value as "asc" | "desc")}
+                  className="bg-surface border border-stroke-strong text-fg-secondary text-sm rounded px-3 py-1.5 focus:outline-none focus:border-primary"
+                >
+                  <option value="desc">Newest first</option>
+                  <option value="asc">Oldest first</option>
                 </select>
               </div>
 
@@ -408,41 +525,58 @@ const SettingsPage = () => {
                 <span className="text-[10px] uppercase font-bold text-emerald-500 flex items-center gap-1.5 mr-2 tracking-widest bg-emerald-500/10 px-2 py-1 rounded">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
                 </span>
-                <button onClick={handleExportLogs} className="btn-ghost text-xs px-4 py-1.5 font-bold">
+                <button onClick={handleExportLogs} disabled={filteredLogs.length === 0} className="btn-ghost text-xs px-4 py-1.5 font-bold disabled:opacity-50">
                   Export JSON
                 </button>
-                <button onClick={handleClearLogs} className="btn-ghost text-rose-400 hover:text-rose-300 text-xs px-4 py-1.5 font-bold">
-                  Clear All
+                <button onClick={handleClearLogs} disabled={clearingLogs || filteredLogs.length === 0} className="btn-ghost text-rose-400 hover:text-rose-300 text-xs px-4 py-1.5 font-bold disabled:opacity-50">
+                  {clearingLogs ? "Clearing..." : "Clear All"}
                 </button>
               </div>
             </div>
 
             <div className="flex-1 p-4 overflow-y-auto">
-              {filteredLogs.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-16 text-center h-full text-slate-500 italic gap-2">
+              {loadingLogs ? (
+                <div className="flex items-center justify-center p-16 h-full gap-3 text-fg-muted">
+                  <InlineSpinner />
+                  <span>Loading logs...</span>
+                </div>
+              ) : filteredLogs.length === 0 ? (
+                <div className="flex flex-col items-center justify-center p-16 text-center h-full text-fg-muted italic gap-2">
                   <span className="text-3xl opacity-50">📡</span>
                   <p>Awaiting system activity logs.</p>
                 </div>
               ) : (
-                <div className="space-y-1.5 flex flex-col-reverse">
-                  {/* flex-col-reverse with reversed map so newest is physically at bottom but visually flows nicely, or just regular if ordered from supabase */}
+                <div className="space-y-1.5">
+                  <div className="grid grid-cols-[160px,90px,140px,1fr] gap-2 px-2 text-[11px] font-mono text-fg-muted uppercase tracking-widest">
+                    <span>Time</span>
+                    <span>Status</span>
+                    <span>Module</span>
+                    <span>Message</span>
+                  </div>
                   {logsPagination.paginatedItems.map((log) => (
-                    <div key={log.id} className="bg-surface border border-slate-800/80 rounded py-2.5 px-3 flex flex-col sm:flex-row sm:items-center gap-3 font-mono text-[11px] align-top">
-                      <div className="w-32 shrink-0 text-slate-500 truncate" title={new Date(log.created_at).toLocaleString()}>
-                        {new Date(log.created_at).toLocaleTimeString()} - {new Date(log.created_at).toLocaleDateString()}
+                    <div
+                      key={log.id}
+                      className="grid grid-cols-[160px,90px,140px,1fr] gap-2 items-start bg-surface border border-stroke-strong rounded-lg px-3 py-2.5 shadow-sm"
+                    >
+                      <div className="text-fg-muted text-[11px]" title={new Date(log.timestamp).toLocaleString()}>
+                        {new Date(log.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                       </div>
-                      <div className="w-20 shrink-0">
-                        <span className={`px-2 py-0.5 rounded font-bold ${
-                          log.status === "error" ? "bg-rose-500/20 text-rose-400" :
-                          log.status === "success" ? "bg-emerald-500/20 text-emerald-400" :
-                          "bg-blue-500/20 text-blue-400"
-                        }`}>
-                          {log.status.toUpperCase()}
+                      <div>
+                        <span
+                          className={`px-2 py-0.5 rounded font-bold text-[11px] ${
+                            log.type === "error"
+                              ? "bg-rose-100 text-rose-700"
+                              : log.type === "success"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-blue-100 text-blue-700"
+                          }`}
+                        >
+                          {log.type.toUpperCase()}
                         </span>
                       </div>
-                      <div className="w-36 shrink-0 font-bold text-slate-300">[{log.action}]</div>
-                      <div className="flex-1 text-slate-300 leading-relaxed max-w-full overflow-hidden text-ellipsis">
-                        {typeof log.details === 'string' ? log.details : JSON.stringify(log.details)}
+                      <div className="font-semibold text-fg-secondary truncate">{log.module}</div>
+                      <div className="text-primary text-[13px] leading-relaxed">
+                        {log.message}
                       </div>
                     </div>
                   ))}
@@ -475,7 +609,7 @@ const SettingsPage = () => {
             </div>
           ) : (
             <div className="glass-panel p-6 space-y-6 max-w-2xl animate-in fade-in">
-              <h2 className="text-lg font-bold text-slate-200 border-b border-slate-800 pb-2">Global AI Configuration</h2>
+              <h2 className="text-lg font-bold text-fg-secondary border-b border-stroke pb-2">Global AI Configuration</h2>
               
               <div className="bg-primary/10 border border-primary/20 text-blue-200 p-4 rounded-lg text-sm flex gap-3">
                 <span className="text-lg">🤖</span>
@@ -484,13 +618,16 @@ const SettingsPage = () => {
   
               <div className="space-y-4 pt-2">
                 <label className="block space-y-2">
-                  <span className="text-sm font-semibold text-slate-200">Active Global AI Engine</span>
+                  <span className="text-sm font-semibold text-fg-secondary">Active Global AI Engine</span>
                   <select
                     value={appSettings.default_ai_provider || ""}
                     onChange={(e) => handleSettingToggle("default_ai_provider", e.target.value)}
-                    className="w-full bg-surface border border-slate-700 rounded-lg px-3 py-3 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary appearance-none cursor-pointer"
+                    className="w-full bg-surface border border-stroke rounded-lg px-3 py-3 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-primary appearance-none cursor-pointer"
+                    disabled={savingSettingKey === "default_ai_provider" || loadingKeys}
                   >
-                    {apiKeys.length === 0 ? (
+                    {loadingKeys ? (
+                      <option value="" disabled>Loading APIs...</option>
+                    ) : apiKeys.length === 0 ? (
                       <option value="" disabled>No APIs configured</option>
                     ) : (
                       <>
@@ -506,24 +643,24 @@ const SettingsPage = () => {
                 </label>
   
                 <div className="pt-4">
-                  <h3 className="text-sm font-semibold text-slate-300 mb-3">Loaded Provider Keys</h3>
+                  <h3 className="text-sm font-semibold text-fg-secondary mb-3">Loaded Provider Keys</h3>
                   {apiKeys.length === 0 ? (
-                    <div className="border border-dashed border-slate-700 p-4 rounded text-center text-sm text-slate-500">
+                    <div className="border border-dashed border-stroke p-4 rounded text-center text-sm text-fg-muted">
                       No keys found in your API Vault.
                     </div>
                   ) : (
                     <div className="space-y-2">
                       {apiKeysPagination.paginatedItems.map((k: any) => (
-                        <div key={k.Id ?? k.id} className="flex items-center justify-between p-3 bg-surface border border-slate-800 rounded">
-                          <span className="text-sm font-medium text-slate-200">{k.Provider ?? k.provider}</span>
-                          <span className="text-xs font-mono text-slate-500">{k.Name ?? k.key_name}</span>
+                        <div key={k.Id ?? k.id} className="flex items-center justify-between p-3 bg-surface border border-stroke rounded">
+                          <span className="text-sm font-medium text-fg-secondary">{k.Provider ?? k.provider}</span>
+                          <span className="text-xs font-mono text-fg-muted">{k.Name ?? k.key_name}</span>
                         </div>
                       ))}
                     </div>
                   )}
 
                   {apiKeys.length > 0 ? (
-                    <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/20">
+                    <div className="mt-4 rounded-xl border border-stroke bg-panel/20">
                       <PaginationControls
                         currentPage={apiKeysPagination.currentPage}
                         pageSize={apiKeysPagination.pageSize}

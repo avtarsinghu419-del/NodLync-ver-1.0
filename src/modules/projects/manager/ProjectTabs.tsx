@@ -29,7 +29,7 @@ interface Props {
 
 const ProjectTabs = ({ activeTab, onChange, taskCount }: Props) => {
   return (
-    <div className="flex items-center gap-1 border-b border-slate-800 px-1">
+    <div className="flex items-center gap-1 border-b border-stroke px-1">
       {TABS.map((tab) => {
         const isActive = tab.id === activeTab;
         return (
@@ -39,7 +39,7 @@ const ProjectTabs = ({ activeTab, onChange, taskCount }: Props) => {
             className={`relative flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors
               ${isActive
                 ? "text-primary"
-                : "text-slate-400 hover:text-slate-200"
+                : "text-fg-muted hover:text-fg-secondary"
               }`}
           >
             <span className="text-base leading-none">{tab.icon}</span>

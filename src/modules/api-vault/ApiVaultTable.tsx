@@ -32,11 +32,11 @@ const ApiVaultTable = ({
   onDelete,
 }: ApiVaultTableProps) => {
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-800">
+    <div className="overflow-hidden rounded-xl border border-stroke">
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-800">
-          <thead className="bg-slate-900/80">
-            <tr className="text-left text-xs uppercase tracking-[0.18em] text-slate-500">
+          <thead className="bg-panel/80">
+            <tr className="text-left text-xs uppercase tracking-[0.18em] text-fg-muted">
               <th className="px-4 py-3 font-medium w-10">
                 <IndeterminateCheckbox
                   checked={allSelected}

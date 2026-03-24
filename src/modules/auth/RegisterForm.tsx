@@ -12,12 +12,19 @@ const RegisterForm = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [confirm, setConfirm] = useState("");
   const [showConfirm, setShowConfirm] = useState(false);
+  const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (!agreed) {
+      setError("Please confirm you have read the Privacy Policy and Terms & Conditions.");
+      return;
+    }
+
     if (password !== confirm) {
       setError("Passwords do not match");
       return;
@@ -40,27 +47,27 @@ const RegisterForm = () => {
     <div className="glass-panel max-w-md w-full px-8 py-6 space-y-6 shadow-xl">
       <div>
         <p className="text-2xl font-semibold">Create account</p>
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-fg-muted">
           Start managing NodLync from the web.
         </p>
       </div>
       <form className="space-y-4" onSubmit={onSubmit}>
         <label className="block space-y-1">
-          <span className="text-sm text-slate-300">Email</span>
+          <span className="text-sm text-fg-secondary">Email</span>
           <input
             type="email"
-            className="w-full rounded-lg border border-slate-700 bg-surface px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary"
+            className="w-full rounded-lg border border-stroke bg-surface px-3 py-2 text-fg focus:outline-none focus:ring-2 focus:ring-primary"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
         </label>
         <label className="block space-y-1">
-          <span className="text-sm text-slate-300">Password</span>
+          <span className="text-sm text-fg-secondary">Password</span>
           <div className="relative">
             <input
               type={showPassword ? "text" : "password"}
-              className="w-full rounded-lg border border-slate-700 bg-surface px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary pr-10"
+              className="w-full rounded-lg border border-stroke bg-surface px-3 py-2 text-fg focus:outline-none focus:ring-2 focus:ring-primary pr-10"
               required
               minLength={6}
               value={password}
@@ -68,7 +75,7 @@ const RegisterForm = () => {
             />
             <button
               type="button"
-              className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-200"
+              className="absolute inset-y-0 right-0 flex items-center pr-3 text-fg-muted hover:text-fg-secondary"
               onClick={() => setShowPassword(!showPassword)}
             >
               {showPassword ? (
@@ -85,11 +92,11 @@ const RegisterForm = () => {
           </div>
         </label>
         <label className="block space-y-1">
-          <span className="text-sm text-slate-300">Confirm password</span>
+          <span className="text-sm text-fg-secondary">Confirm password</span>
           <div className="relative">
             <input
               type={showConfirm ? "text" : "password"}
-              className="w-full rounded-lg border border-slate-700 bg-surface px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary pr-10"
+              className="w-full rounded-lg border border-stroke bg-surface px-3 py-2 text-fg focus:outline-none focus:ring-2 focus:ring-primary pr-10"
               required
               minLength={6}
               value={confirm}
@@ -97,7 +104,7 @@ const RegisterForm = () => {
             />
             <button
               type="button"
-              className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-200"
+              className="absolute inset-y-0 right-0 flex items-center pr-3 text-fg-muted hover:text-fg-secondary"
               onClick={() => setShowConfirm(!showConfirm)}
             >
               {showConfirm ? (
@@ -122,7 +129,23 @@ const RegisterForm = () => {
           {loading ? "Creating account..." : "Register"}
         </button>
       </form>
-      <p className="text-sm text-slate-400 text-center">
+
+      <div className="text-sm text-fg-muted">
+        <div className="flex items-start gap-2 mt-2">
+          <input
+            id="register-agree"
+            type="checkbox"
+            checked={agreed}
+            onChange={(e) => setAgreed(e.target.checked)}
+            className="h-4 w-4 text-primary rounded bg-surface border border-stroke-strong"
+          />
+          <label htmlFor="register-agree" className="leading-relaxed">
+            I have read and agree to the <Link className="text-primary hover:underline" to="/privacy">Privacy Policy</Link> and <Link className="text-primary hover:underline" to="/terms">Terms & Conditions</Link>.
+          </label>
+        </div>
+      </div>
+
+      <p className="text-sm text-fg-muted text-center">
         Already registered?{" "}
         <Link className="text-primary hover:underline" to="/login">
           Sign in

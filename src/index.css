@@ -2,21 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/* Default (dark) palette */
+:root,
+html.dark {
+  --bg: 12 17 29;
+  --surface: 18 26 43;
+  --panel: 15 23 42;
+  --border: 31 41 55;
+  --border-strong: 51 65 85;
+  --text-primary: 233 237 245;
+  --text-secondary: 203 213 225;
+  --text-muted: 148 163 184;
+  --input-bg: 15 23 42;
+  --input-border: 31 41 55;
+  --card-shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
   color-scheme: dark;
 }
 
+html.light {
+  /* Pure light palette, no opacity tricks */
+  --bg: 255 255 255;
+  --surface: 248 250 252;
+  --panel: 255 255 255;
+  --border: 226 232 240;
+  --border-strong: 203 213 225;
+  --text-primary: 15 23 42;
+  --text-secondary: 31 41 55;
+  --text-muted: 71 85 105;
+  --input-bg: 255 255 255;
+  --input-border: 226 232 240;
+  --card-shadow: 0 10px 28px rgba(15, 23, 42, 0.10);
+  color-scheme: light;
+}
+
 body {
-  @apply bg-background text-slate-200 min-h-screen;
+  background-color: rgb(var(--bg));
+  color: rgb(var(--text-primary));
+  min-height: 100%;
   font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
 }
 
 #root {
-  @apply min-h-screen overflow-x-hidden;
-}
-
-* {
-  @apply transition-all duration-300 ease-in-out;
+  min-height: 100vh;
+  overflow-x: hidden;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -29,31 +57,51 @@ body {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  @apply bg-slate-800 rounded-full hover:bg-slate-700;
+  background-color: rgb(var(--border));
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(var(--border-strong));
 }
 
 .glass-panel {
-  @apply bg-card/70 backdrop-blur border border-slate-700 rounded-xl;
+  background-color: rgb(var(--panel));
+  border: 1px solid rgb(var(--border));
+  border-radius: 0.75rem;
+  box-shadow: var(--card-shadow);
 }
 
 .btn-primary {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg bg-primary text-slate-900 px-4 py-2 font-semibold transition hover:brightness-110 disabled:opacity-60;
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 font-semibold transition disabled:opacity-60;
+  background-color: #0ea5e9;
+  color: #0b1220;
+  box-shadow: 0 10px 24px rgba(14, 165, 233, 0.28);
 }
 
 .btn-ghost {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-slate-200 hover:bg-slate-800 transition;
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 transition;
+  background-color: rgb(var(--surface));
+  border: 1px solid rgb(var(--border));
+  color: rgb(var(--text-secondary));
 }
 
-/* Global Light Theme Invert Strategy for Tailwind */
-html.light {
-  filter: invert(1) hue-rotate(180deg);
-  background-color: #f0e8d5; /* Inverted 0f172a roughly */
+input, textarea, select {
+  background-color: rgb(var(--input-bg));
+  border: 1px solid rgb(var(--input-border));
+  color: rgb(var(--text-primary));
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
-/* Prevent images/media and primary tokens from being inverted */
+input::placeholder,
+textarea::placeholder {
+  color: rgb(var(--text-muted));
+  opacity: 1;
+}
+
 html.light img, 
 html.light video,
 html.light iframe,
 html.light svg {
-  filter: invert(1) hue-rotate(180deg);
+  filter: none;
 }

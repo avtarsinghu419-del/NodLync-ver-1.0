@@ -38,9 +38,7 @@ export function useProjects() {
 
   // Keep global store in sync for components that still rely on it
   useEffect(() => {
-    if (projects.length > 0) {
-      setProjects(projects);
-    }
+    setProjects(projects);
   }, [projects, setProjects]);
 
   // Create Mutation with Optimistic Update

@@ -144,12 +144,9 @@ export const PROVIDER_REGISTRY: ProviderConfig[] = [
     keywords: ["openrouter"],
     callStyle: "openai-compat",
     baseUrl: "https://openrouter.ai/api/v1",
-    defaultModel: "openai/gpt-4o-mini",
+    defaultModel: "openrouter/free",
     models: [
-      { label: "GPT-4o Mini (via OR)", value: "openai/gpt-4o-mini" },
-      { label: "Claude 3.5 Sonnet (via OR)", value: "anthropic/claude-3.5-sonnet" },
-      { label: "Llama 3.1 70B (via OR)", value: "meta-llama/llama-3.1-70b-instruct" },
-      { label: "Gemini Flash 1.5 (via OR)", value: "google/gemini-flash-1.5" },
+      { label: "OpenRouter Free", value: "openrouter/free" },
     ],
   },
   {
@@ -493,4 +490,35 @@ async function callOllama(opts: {
 
   const data = await res.json();
   return data.message?.content ?? "(No response)";
+}
+
+// ─── OpenRouter Models Fetcher ───────────────────────────────────────────────
+
+let cachedOpenRouterModels: { label: string; value: string }[] | null = null;
+
+export async function fetchOpenRouterModels(): Promise<{ label: string; value: string }[]> {
+  if (cachedOpenRouterModels) return cachedOpenRouterModels;
+
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/models");
+    if (!res.ok) throw new Error("Failed to fetch models");
+    
+    const data = await res.json();
+    const freeModels = data.data
+      .filter((m: any) => m.id.includes(":free"))
+      .map((m: any) => ({
+        label: m.name || m.id,
+        value: m.id
+      }));
+
+    if (freeModels.length === 0) {
+      return [{ label: "OpenRouter Free", value: "openrouter/free" }];
+    }
+
+    cachedOpenRouterModels = freeModels;
+    return freeModels;
+  } catch (err) {
+    console.error("OpenRouter model fetch error:", err);
+    return [{ label: "OpenRouter Free", value: "openrouter/free" }];
+  }
 }

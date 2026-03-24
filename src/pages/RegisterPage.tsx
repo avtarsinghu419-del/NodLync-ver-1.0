@@ -12,7 +12,7 @@ const RegisterPage = () => {
         <div className="w-20 h-20">
           <img src="/favicon.svg" alt="NodLync Logo" className="w-full h-full object-contain drop-shadow-[0_0_15px_rgba(56,189,248,0.8)]" />
         </div>
-        <h1 className="text-4xl font-bold tracking-wider text-slate-100">NodLync</h1>
+        <h1 className="text-4xl font-bold tracking-wider text-fg">NodLync</h1>
       </div>
 
       <div className="z-10 w-full max-w-md">

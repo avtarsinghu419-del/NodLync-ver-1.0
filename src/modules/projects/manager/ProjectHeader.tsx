@@ -1,22 +1,24 @@
-import type { Project, ProjectStatus } from "../../../types";
+import { useNavigate } from "react-router-dom";
 import StatusBadge from "../../../components/StatusBadge";
 import InlineSpinner from "../../../components/InlineSpinner";
-import { useNavigate } from "react-router-dom";
+import type { Project, ProjectStatus } from "../../../types";
 
 interface Props {
   project: Project;
-  progress: number; // 0–100
+  progress: number;
   onExport: () => void;
   onGenerateReport: () => void;
   onAddUpdate: () => void;
+  onRefresh?: () => void;
+  refreshing?: boolean;
   saving?: boolean;
 }
 
 const STATUS_DOT: Record<ProjectStatus, string> = {
-  draft: "bg-slate-400",
+  draft: "bg-fg-muted",
   active: "bg-emerald-400",
   paused: "bg-amber-400",
-  archived: "bg-slate-600",
+  archived: "bg-surface",
 };
 
 const ProjectHeader = ({
@@ -25,82 +27,94 @@ const ProjectHeader = ({
   onExport,
   onGenerateReport,
   onAddUpdate,
+  onRefresh,
+  refreshing = false,
   saving,
 }: Props) => {
   const navigate = useNavigate();
 
   return (
-    <div className="glass-panel px-6 py-5 space-y-4">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-xs text-slate-500">
+    <div className="glass-panel space-y-4 px-6 py-5">
+      <div className="flex items-center gap-2 text-xs text-fg-muted">
         <button
+          type="button"
           onClick={() => navigate("/projects")}
-          className="hover:text-slate-300 transition"
+          className="transition hover:text-fg-secondary"
         >
           Projects
         </button>
-        <span>›</span>
-        <span className="text-slate-300 font-medium truncate max-w-xs">
-          {project.name}
-        </span>
+        <span>{">"}</span>
+        <span className="max-w-xs truncate font-medium text-fg-secondary">{project.name}</span>
       </div>
 
-      {/* Title row */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="space-y-2 flex-1 min-w-0">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold text-slate-100 truncate">
-              {project.name}
-            </h1>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="truncate text-2xl font-bold text-fg">{project.name}</h1>
             <div className="flex items-center gap-1.5">
-              <span
-                className={`w-2 h-2 rounded-full ${STATUS_DOT[project.status]}`}
-              />
+              <span className={`h-2 w-2 rounded-full ${STATUS_DOT[project.status]}`} />
               <StatusBadge status={project.status} />
             </div>
             {saving && <InlineSpinner />}
           </div>
 
-          {/* Progress bar */}
-          <div className="flex items-center gap-3 max-w-md">
-            <div className="flex-1 bg-slate-800 rounded-full h-2 overflow-hidden">
+          <div className="flex max-w-md items-center gap-3">
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface">
               <div
-                className="h-full bg-gradient-to-r from-primary to-accent rounded-full transition-all duration-700"
+                className="h-full rounded-full bg-gradient-to-r from-primary to-accent transition-[width] duration-700"
                 style={{ width: `${progress}%` }}
               />
             </div>
-            <span className="text-sm font-semibold text-slate-300 tabular-nums w-9 text-right">
+            <span className="w-9 text-right text-sm font-semibold tabular-nums text-fg-secondary">
               {progress}%
             </span>
-            <span className="text-xs text-slate-500">overall progress</span>
+            <span className="text-xs text-fg-muted">overall progress</span>
           </div>
         </div>
 
-        {/* Action buttons */}
-        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+        <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
           <button
-            className="btn-ghost text-sm flex items-center gap-1.5"
-            onClick={onExport}
+            type="button"
+            className="btn-ghost flex items-center gap-1.5 text-sm"
+            onClick={onRefresh ?? (() => window.location.reload())}
+            disabled={refreshing}
+            title="Refresh project"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg
+              className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M4 4v5h5M20 20v-5h-5M5.64 18.36A9 9 0 103.5 9m15 6a9 9 0 01-14.86 3.36"
+              />
+            </svg>
+            Refresh
+          </button>
+          <button className="btn-ghost flex items-center gap-1.5 text-sm" onClick={onExport}>
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
             Export
           </button>
           <button
-            className="btn-ghost text-sm flex items-center gap-1.5"
+            className="btn-ghost flex items-center gap-1.5 text-sm"
             onClick={onGenerateReport}
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
             Generate Report
           </button>
           <button
-            className="btn-primary text-sm flex items-center gap-1.5"
+            className="btn-primary flex items-center gap-1.5 text-sm"
             onClick={onAddUpdate}
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
             Add Update

@@ -14,7 +14,7 @@ export default function DashboardWorkflowsCard({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-lg">⚙️</span>
-          <h3 className="font-semibold text-slate-200 text-sm">{title}</h3>
+          <h3 className="font-semibold text-fg-secondary text-sm">{title}</h3>
         </div>
         <button type="button" className="btn-ghost text-xs" disabled>
           {viewAllLabel}
@@ -23,18 +23,18 @@ export default function DashboardWorkflowsCard({
 
       <div className="space-y-3">
         {workflows.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-800/60 p-6 text-sm text-slate-500">
+          <div className="rounded-xl border border-dashed border-stroke/60 p-6 text-sm text-fg-muted">
             No workflows found. Create one in the Workflows section.
           </div>
         ) : (
           workflows.slice(0, 4).map((w) => (
             <div
               key={w.id}
-              className="rounded-xl border border-slate-800/60 bg-slate-950/10 p-4 flex items-start justify-between gap-4"
+              className="rounded-xl border border-stroke/60 bg-panel/10 p-4 flex items-start justify-between gap-4"
             >
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-100 truncate">{w.name}</p>
-                <p className="text-xs text-slate-400">
+                <p className="text-sm font-semibold text-fg truncate">{w.name}</p>
+                <p className="text-xs text-fg-muted">
                   {w.parent_id ? "Folder" : "Root"} • {new Date(w.created_at).toLocaleDateString("en-US")}
                 </p>
               </div>

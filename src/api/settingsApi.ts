@@ -26,14 +26,27 @@ export interface AppLog {
 
 // ── Profile ──
 export async function getProfile(userId: string) {
-  let { data } = await supabase.from("user_profiles").select("*").eq("id", userId).single();
+  const { data: existingProfile, error } = await supabase
+    .from("user_profiles")
+    .select("*")
+    .eq("id", userId)
+    .single();
+
+  if (error && error.code !== "PGRST116") {
+    return { data: null, error };
+  }
+
+  let data = existingProfile;
   
   if (!data) {
     // Attempt auto-creation if not found
     const res = await supabase.from("user_profiles").insert({ id: userId, display_name: "New User", avatar_url: "" }).select().single();
+    if (res.error) {
+      return { data: null, error: res.error };
+    }
     data = res.data;
   }
-  return { data: data as UserProfile | null };
+  return { data: data as UserProfile | null, error: null };
 }
 
 export async function updateProfile(userId: string, payload: Partial<UserProfile>) {
@@ -43,7 +56,17 @@ export async function updateProfile(userId: string, payload: Partial<UserProfile
 
 // ── Settings ──
 export async function getSettings(userId: string) {
-  let { data } = await supabase.from("app_settings").select("*").eq("user_id", userId).single();
+  const { data: existingSettings, error } = await supabase
+    .from("app_settings")
+    .select("*")
+    .eq("user_id", userId)
+    .single();
+
+  if (error && error.code !== "PGRST116") {
+    return { data: null, error };
+  }
+
+  let data = existingSettings;
   
   if (!data) {
     const defaultSettings = {
@@ -54,9 +77,12 @@ export async function getSettings(userId: string) {
       auto_update_enabled: true
     };
     const res = await supabase.from("app_settings").insert(defaultSettings).select().single();
+    if (res.error) {
+      return { data: null, error: res.error };
+    }
     data = res.data;
   }
-  return { data: data as AppSettings | null };
+  return { data: data as AppSettings | null, error: null };
 }
 
 export async function updateSettings(userId: string, payload: Partial<AppSettings>) {

@@ -73,21 +73,21 @@ const Sidebar = ({ onClose }: { onClose?: () => void }) => {
   };
 
   return (
-    <aside className="w-72 sm:w-80 lg:w-64 h-full bg-surface border-r border-slate-800 p-6 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
+    <aside className="w-72 sm:w-80 lg:w-64 h-full bg-surface border-r border-stroke p-6 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
       <div className="flex items-center justify-between lg:justify-start gap-4 px-2">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 flex items-center justify-center shrink-0">
             <img src="/favicon.svg" alt="NodLync Logo" className="w-full h-full object-contain drop-shadow-[0_0_8px_rgba(56,189,248,0.5)]" />
           </div>
           <div className="min-w-0">
-            <p className="text-xl font-bold tracking-tight text-slate-100">NodLync</p>
-            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">AI ops workspace</p>
+            <p className="text-xl font-bold tracking-tight text-fg">NodLync</p>
+            <p className="text-[10px] text-fg-muted uppercase tracking-widest font-bold">AI ops workspace</p>
           </div>
         </div>
         {onClose && (
           <button 
             onClick={onClose}
-            className="lg:hidden p-2 hover:bg-slate-800 rounded-lg text-slate-400 font-bold"
+            className="lg:hidden p-2 hover:bg-panel rounded-lg text-fg-muted font-bold"
           >
             ✕
           </button>
@@ -107,10 +107,10 @@ const Sidebar = ({ onClose }: { onClose?: () => void }) => {
                   }
                 }}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 group ${
+                  `flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-semibold transition duration-200 group ${
                     isActive
                       ? "bg-primary/10 text-primary border border-primary/20 shadow-[0_0_15px_rgba(56,189,248,0.1)]"
-                      : "text-slate-400 hover:bg-slate-800/80 hover:text-slate-200 border border-transparent"
+                      : "text-fg-muted hover:bg-panel/80 hover:text-fg-secondary border border-transparent"
                   }`
                 }
                 end={item.to === "/"}
@@ -131,9 +131,9 @@ const Sidebar = ({ onClose }: { onClose?: () => void }) => {
             navigate("/settings?tab=profile");
             if (onClose) onClose();
           }}
-          className="mt-6 border-t border-slate-800 pt-6 flex items-center gap-4 px-2 cursor-pointer group"
+          className="mt-6 border-t border-stroke pt-6 flex items-center gap-4 px-2 cursor-pointer group"
         >
-          <div className="w-11 h-11 rounded-full bg-slate-800 border-2 border-slate-700 shrink-0 overflow-hidden flex items-center justify-center relative group-hover:border-primary/50 transition-colors">
+          <div className="w-11 h-11 rounded-full bg-panel border-2 border-stroke shrink-0 overflow-hidden flex items-center justify-center relative group-hover:border-primary/50 transition-colors">
             {userProfile?.avatar_url ? (
               <img src={userProfile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
             ) : (
@@ -146,10 +146,10 @@ const Sidebar = ({ onClose }: { onClose?: () => void }) => {
             </div>
           </div>
           <div className="flex-1 min-w-0 pr-2">
-            <p className="text-sm font-bold truncate text-slate-200 group-hover:text-primary transition-colors">
+            <p className="text-sm font-bold truncate text-fg-secondary group-hover:text-primary transition-colors">
               {userProfile?.display_name || "User"}
             </p>
-            <p className="text-[10px] text-slate-500 font-bold truncate uppercase tracking-widest mt-0.5">
+            <p className="text-[10px] text-fg-muted font-bold truncate uppercase tracking-widest mt-0.5">
               My Profile ➔
             </p>
           </div>

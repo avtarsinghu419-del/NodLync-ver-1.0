@@ -107,7 +107,7 @@ export default function DashboardOverview() {
       </div>
 
       {loading && !initialLoad ? (
-        <div className="fixed top-4 right-4 bg-primary text-slate-900 text-xs font-bold px-3 py-1.5 rounded-full shadow-lg animate-pulse z-50">
+        <div className="fixed top-4 right-4 bg-primary text-on-primary text-xs font-bold px-3 py-1.5 rounded-full shadow-lg animate-pulse z-50">
           Refreshing Data...
         </div>
       ) : null}

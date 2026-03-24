@@ -7,7 +7,7 @@ const toneClasses: Record<StatTone, { value: string; glow: string }> = {
   emerald: { value: "text-emerald-300", glow: "shadow-[0_0_24px_rgba(16,185,129,0.18)]" },
   amber: { value: "text-amber-300", glow: "shadow-[0_0_24px_rgba(245,158,11,0.18)]" },
   rose: { value: "text-rose-300", glow: "shadow-[0_0_24px_rgba(244,63,94,0.18)]" },
-  slate: { value: "text-slate-300", glow: "" },
+  slate: { value: "text-fg-secondary", glow: "" },
 };
 
 export default function DashboardStatCard({
@@ -28,13 +28,13 @@ export default function DashboardStatCard({
     <div className="glass-panel p-5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3 min-w-0">
-          <div className={`rounded-lg border border-slate-700/60 bg-surface/40 p-2`}>{icon}</div>
+          <div className={`rounded-lg border border-stroke/60 bg-surface/40 p-2`}>{icon}</div>
           <div className="min-w-0">
-            <p className="text-sm text-slate-400">{label}</p>
+            <p className="text-sm text-fg-muted">{label}</p>
           </div>
         </div>
         {meta ? (
-          <span className="text-xs text-slate-400 bg-slate-800/40 border border-slate-700/60 px-2 py-1 rounded-full">
+          <span className="text-xs text-fg-muted bg-surface/40 border border-stroke/60 px-2 py-1 rounded-full">
             {meta}
           </span>
         ) : null}

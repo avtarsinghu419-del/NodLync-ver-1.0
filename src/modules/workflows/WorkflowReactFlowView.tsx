@@ -105,7 +105,7 @@ const WorkflowReactFlowView = ({ workflowJson }: Props) => {
   return (
     <div className="h-[65vh] w-full">
       {!hasGraph ? (
-        <div className="h-full flex items-center justify-center text-sm text-slate-500">
+        <div className="h-full flex items-center justify-center text-sm text-fg-muted">
           Visual view not available for this workflow JSON.
         </div>
       ) : (

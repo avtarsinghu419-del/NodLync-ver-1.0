@@ -16,7 +16,7 @@ const platformColor = (p: string) => {
     case "zoom": return "text-blue-400 bg-blue-400/10";
     case "google meet": return "text-emerald-400 bg-emerald-400/10";
     case "teams": return "text-indigo-400 bg-indigo-400/10";
-    default: return "text-slate-400 bg-slate-400/10";
+    default: return "text-fg-muted bg-fg-muted/10";
   }
 };
 
@@ -110,6 +110,8 @@ const MeetingsPage = () => {
 
   useEffect(() => {
     const interval = setInterval(() => {
+      if (document.hidden) return;
+
       const now = new Date();
       meetings.forEach((m) => {
         const mTime = new Date(m.scheduled_at);
@@ -240,7 +242,7 @@ const MeetingsPage = () => {
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={`px-4 py-3 rounded-md shadow-xl text-sm font-medium border flex items-center gap-3 pointer-events-auto ${t.type === "urgent" ? "bg-rose-900/90 border-rose-700 text-rose-100" : "bg-surface/90 border-slate-700 text-slate-100 backdrop-blur"}`}
+            className={`px-4 py-3 rounded-md shadow-xl text-sm font-medium border flex items-center gap-3 pointer-events-auto ${t.type === "urgent" ? "bg-rose-900/90 border-rose-700 text-rose-100" : "bg-surface/90 border-stroke text-fg backdrop-blur"}`}
           >
             <span>{t.type === "urgent" ? "Alert" : "Bell"}</span>
             {t.message}
@@ -248,11 +250,11 @@ const MeetingsPage = () => {
         ))}
       </div>
 
-      <div className="flex-1 flex flex-col min-h-0 bg-slate-900/40 rounded-2xl border border-slate-800 overflow-hidden backdrop-blur-sm">
+      <div className="flex-1 flex flex-col min-h-0 bg-panel/40 rounded-2xl border border-stroke overflow-hidden backdrop-blur-sm">
         <ModuleHeader
-          title="Meeting Links"
+          title="Meeting"
           description="SCHEDULE AND JOIN VIRTUAL MEETINGS"
-          icon="📅"
+          icon="🗓️"
         >
           <button
             onClick={() => setSelectedMeeting(null)}
@@ -270,7 +272,7 @@ const MeetingsPage = () => {
           <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-hide">
              <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs uppercase tracking-widest text-slate-500 font-bold">Upcoming</h3>
+                  <h3 className="text-xs uppercase tracking-widest text-fg-muted font-bold">Upcoming</h3>
                   <BulkDeleteBar 
                     count={upcomingSelection.selectedCount} 
                     label="upcoming meetings"
@@ -281,7 +283,7 @@ const MeetingsPage = () => {
                 </div>
                 
                 <div className="grid gap-3">
-                   <div className="flex items-center gap-3 px-4 py-2 text-xxs uppercase tracking-wider text-slate-500 font-bold border-b border-slate-800">
+                   <div className="flex items-center gap-3 px-4 py-2 text-xxs uppercase tracking-wider text-fg-muted font-bold border-b border-stroke">
                       <IndeterminateCheckbox 
                         checked={upcomingPageState.checked}
                         indeterminate={upcomingPageState.indeterminate}
@@ -294,21 +296,21 @@ const MeetingsPage = () => {
                    </div>
                    
                    {upcomingPagination.paginatedItems.map(m => (
-                      <div key={m.id} className="group flex items-center gap-3 px-4 py-3 hover:bg-slate-800/40 rounded-lg transition-colors border border-transparent hover:border-slate-700/50">
+                      <div key={m.id} className="group flex items-center gap-3 px-4 py-3 hover:bg-surface/40 rounded-lg transition-colors border border-transparent hover:border-stroke/50">
                          <input 
                             type="checkbox" 
                             checked={upcomingSelection.isSelected(m.id)}
                             onChange={() => upcomingSelection.toggleOne(m.id)}
-                            className="rounded border-slate-700 bg-slate-800 text-primary focus:ring-primary/20"
+                            className="rounded border-stroke bg-surface text-primary focus:ring-primary/20"
                          />
                          <div className="flex-1 min-w-0" onClick={() => setSelectedMeeting(m)}>
                             <div className="flex items-center gap-2">
-                               <span className="text-slate-100 font-medium truncate">{m.title}</span>
+                               <span className="text-fg font-medium truncate">{m.title}</span>
                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-tight ${platformColor(m.platform)}`}>
                                   {m.platform}
                                </span>
                             </div>
-                            <div className="text-xs text-slate-500 mt-0.5 font-mono">
+                            <div className="text-xs text-fg-muted mt-0.5 font-mono">
                                {new Date(m.scheduled_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
                             </div>
                          </div>
@@ -325,7 +327,7 @@ const MeetingsPage = () => {
                    ))}
 
                    {upcomingMeetings.length === 0 && (
-                      <div className="py-12 text-center text-slate-500 text-sm border border-dashed border-slate-800 rounded-xl bg-slate-800/20">
+                      <div className="py-12 text-center text-fg-muted text-sm border border-dashed border-stroke rounded-xl bg-surface/20">
                          No upcoming meetings.
                       </div>
                    )}
@@ -346,9 +348,9 @@ const MeetingsPage = () => {
                 )}
              </div>
 
-             <div className="space-y-4 pt-4 border-t border-slate-800/50">
+             <div className="space-y-4 pt-4 border-t border-stroke/50">
                 <div className="flex items-center justify-between">
-                   <h3 className="text-xs uppercase tracking-widest text-slate-600 font-bold">Past Meetings</h3>
+                   <h3 className="text-xs uppercase tracking-widest text-fg-muted font-bold">Past Meetings</h3>
                    <BulkDeleteBar 
                     count={pastSelection.selectedCount} 
                     label="past meetings"
@@ -360,21 +362,21 @@ const MeetingsPage = () => {
 
                 <div className="grid gap-2 opacity-60 hover:opacity-100 transition-opacity">
                    {pastPagination.paginatedItems.map(m => (
-                      <div key={m.id} className="group flex items-center gap-3 px-4 py-2 hover:bg-slate-800/30 rounded-lg transition-colors">
+                      <div key={m.id} className="group flex items-center gap-3 px-4 py-2 hover:bg-surface/30 rounded-lg transition-colors">
                          <input 
                             type="checkbox" 
                             checked={pastSelection.isSelected(m.id)}
                             onChange={() => pastSelection.toggleOne(m.id)}
-                            className="rounded border-slate-800 bg-slate-900 text-primary/40 focus:ring-primary/10"
+                            className="rounded border-stroke bg-panel text-primary/40 focus:ring-primary/10"
                          />
                          <div className="flex-1 min-w-0" onClick={() => setSelectedMeeting(m)}>
                             <div className="flex items-center gap-2">
-                               <span className="text-slate-400 text-sm truncate">{m.title}</span>
-                               <span className="text-[9px] text-slate-600">{m.platform}</span>
+                               <span className="text-fg-muted text-sm truncate">{m.title}</span>
+                               <span className="text-[9px] text-fg-muted">{m.platform}</span>
                             </div>
                          </div>
                          <div className="text-right flex items-center gap-3">
-                            <span className="text-xxs font-mono text-slate-600">
+                            <span className="text-xxs font-mono text-fg-muted">
                                {new Date(m.scheduled_at).toLocaleDateString()}
                             </span>
                             <button onClick={(e) => handleDelete(m.id, e)} className="p-1.5 hover:bg-rose-500/10 rounded text-rose-500/40 opacity-0 group-hover:opacity-100">🗑️</button>
@@ -401,34 +403,34 @@ const MeetingsPage = () => {
         )}
       </div>
 
-      <div className="w-full lg:w-[400px] shrink-0 bg-surface rounded-2xl border border-slate-800 shadow-2xl overflow-hidden flex flex-col h-full">
-         <div className="p-6 border-b border-slate-800 bg-slate-800/20 backdrop-blur-md">
-            <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+      <div className="w-full lg:w-[400px] shrink-0 bg-surface rounded-2xl border border-stroke shadow-2xl overflow-hidden flex flex-col h-full">
+         <div className="p-6 border-b border-stroke bg-surface/20 backdrop-blur-md">
+            <h2 className="text-lg font-bold text-fg flex items-center gap-2">
                <span>{selectedMeeting ? "📅 Edit Meeting" : "✨ New Meeting"}</span>
             </h2>
-            <p className="text-xs text-slate-500 mt-1 uppercase tracking-wider font-medium">Configure meeting details</p>
+            <p className="text-xs text-fg-muted mt-1 uppercase tracking-wider font-medium">Configure meeting details</p>
          </div>
 
          <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
             <form id="meeting-form" onSubmit={handleSave} className="space-y-5">
                <div className="space-y-1.5">
-                  <label className="text-xxs uppercase tracking-widest text-slate-500 font-bold ml-1">Title</label>
+                  <label className="text-xxs uppercase tracking-widest text-fg-muted font-bold ml-1">Title</label>
                   <input
                     required
                     value={form.title}
                     onChange={e => setForm({ ...form, title: e.target.value })}
-                    className="w-full rounded-xl bg-slate-900 border border-slate-700 px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-slate-600 text-slate-100"
+                    className="w-full rounded-xl bg-panel border border-stroke px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition placeholder:text-fg-muted text-fg"
                     placeholder="E.g. Daily Standup"
                   />
                </div>
 
                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                     <label className="text-xxs uppercase tracking-widest text-slate-500 font-bold ml-1">Platform</label>
+                     <label className="text-xxs uppercase tracking-widest text-fg-muted font-bold ml-1">Platform</label>
                      <select
                        value={form.platform}
                        onChange={e => setForm({ ...form, platform: e.target.value })}
-                       className="w-full rounded-xl bg-slate-900 border border-slate-700 px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-slate-100"
+                       className="w-full rounded-xl bg-panel border border-stroke px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-fg"
                      >
                         <option>Zoom</option>
                         <option>Google Meet</option>
@@ -437,59 +439,59 @@ const MeetingsPage = () => {
                      </select>
                   </div>
                   <div className="space-y-1.5">
-                     <label className="text-xxs uppercase tracking-widest text-slate-500 font-bold ml-1">Date</label>
+                     <label className="text-xxs uppercase tracking-widest text-fg-muted font-bold ml-1">Date</label>
                      <input
                        type="date"
                        required
                        value={form.date}
                        onChange={e => setForm({ ...form, date: e.target.value })}
-                       className="w-full rounded-xl bg-slate-900 border border-slate-700 px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-slate-100"
+                       className="w-full rounded-xl bg-panel border border-stroke px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-fg"
                      />
                   </div>
                </div>
 
                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                     <label className="text-xxs uppercase tracking-widest text-slate-500 font-bold ml-1">Time</label>
+                     <label className="text-xxs uppercase tracking-widest text-fg-muted font-bold ml-1">Time</label>
                      <input
                        type="time"
                        required
                        value={form.time}
                        onChange={e => setForm({ ...form, time: e.target.value })}
-                       className="w-full rounded-xl bg-slate-900 border border-slate-700 px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-slate-100"
+                       className="w-full rounded-xl bg-panel border border-stroke px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-fg"
                      />
                   </div>
                   <div className="space-y-1.5">
-                     <label className="text-xxs uppercase tracking-widest text-slate-500 font-bold ml-1">Join URL</label>
+                     <label className="text-xxs uppercase tracking-widest text-fg-muted font-bold ml-1">Join URL</label>
                      <input
                        required
                        value={form.meeting_url}
                        onChange={e => setForm({ ...form, meeting_url: e.target.value })}
-                       className="w-full rounded-xl bg-slate-900 border border-slate-700 px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-slate-600 text-slate-100 font-mono"
+                       className="w-full rounded-xl bg-panel border border-stroke px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition placeholder:text-fg-muted text-fg font-mono"
                        placeholder="https://..."
                      />
                   </div>
                </div>
 
                <div className="space-y-1.5">
-                  <label className="text-xxs uppercase tracking-widest text-slate-500 font-bold ml-1">Description</label>
+                  <label className="text-xxs uppercase tracking-widest text-fg-muted font-bold ml-1">Description</label>
                   <textarea
                     rows={4}
                     value={form.description}
                     onChange={e => setForm({ ...form, description: e.target.value })}
-                    className="w-full rounded-xl bg-slate-900 border border-slate-700 px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-slate-600 text-slate-100 resize-none"
+                    className="w-full rounded-xl bg-panel border border-stroke px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition placeholder:text-fg-muted text-fg resize-none"
                     placeholder="Notes, agenda, or topics..."
                   />
                </div>
             </form>
          </div>
 
-         <div className="p-6 border-t border-slate-800 bg-slate-800/10 backdrop-blur-md flex items-center justify-between gap-4">
+         <div className="p-6 border-t border-stroke bg-surface/10 backdrop-blur-md flex items-center justify-between gap-4">
             {selectedMeeting ? (
                <button 
                   type="button" 
                   onClick={() => setSelectedMeeting(null)}
-                  className="flex-1 py-3 text-xs font-bold text-slate-400 hover:text-slate-200"
+                  className="flex-1 py-3 text-xs font-bold text-fg-muted hover:text-fg-secondary"
                >
                   Cancel
                </button>
@@ -497,9 +499,9 @@ const MeetingsPage = () => {
             <button
               form="meeting-form"
               disabled={saving}
-              className={`flex-[2] py-3 rounded-xl bg-primary text-slate-900 text-sm font-bold shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`flex-[2] py-3 rounded-xl bg-primary text-on-primary text-sm font-bold shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition flex items-center justify-center gap-2 ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-               {saving ? <div className="w-4 h-4 border-2 border-slate-900/30 border-t-slate-900 rounded-full animate-spin" /> : null}
+               {saving ? <div className="w-4 h-4 border-2 border-stroke/30 border-t-slate-900 rounded-full animate-spin" /> : null}
                {selectedMeeting ? "Update Meeting" : "Schedule Meeting"}
             </button>
          </div>

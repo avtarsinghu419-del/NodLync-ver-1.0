@@ -43,17 +43,17 @@ const PaginationControls = ({
   let previousPage: number | null = null;
 
   return (
-    <div className="flex flex-col gap-3 border-t border-slate-800 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 border-t border-stroke px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-fg-muted">
           Showing {startItem}-{endItem} of {totalItems} {itemLabel}
         </p>
-        <label className="flex items-center gap-2 text-xs text-slate-500">
+        <label className="flex items-center gap-2 text-xs text-fg-muted">
           <span>Per page</span>
           <select
             value={pageSize}
             onChange={(e) => onPageSizeChange(Number(e.target.value))}
-            className="rounded-lg border border-slate-700 bg-surface px-2 py-1 text-xs text-slate-200 focus:border-primary focus:outline-none"
+            className="rounded-lg border border-stroke bg-surface px-2 py-1 text-xs text-fg-secondary focus:border-primary focus:outline-none"
           >
             {PAGE_SIZE_OPTIONS.map((option) => (
               <option key={option} value={option}>
@@ -82,15 +82,15 @@ const PaginationControls = ({
             return (
               <div key={page} className="flex items-center gap-1">
                 {showEllipsis ? (
-                  <span className="px-1 text-xs text-slate-600">...</span>
+                  <span className="px-1 text-xs text-fg-muted">...</span>
                 ) : null}
                 <button
                   type="button"
                   onClick={() => onPageChange(page)}
                   className={`min-w-9 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
                     currentPage === page
-                      ? "bg-primary text-slate-900"
-                      : "border border-slate-700 bg-surface text-slate-300 hover:border-slate-500"
+                      ? "bg-primary text-on-primary"
+                      : "border border-stroke bg-surface text-fg-secondary hover:border-stroke-strong"
                   }`}
                 >
                   {page}

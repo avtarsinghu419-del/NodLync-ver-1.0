@@ -64,7 +64,7 @@ const ProjectsPage = () => {
       {/* Page Header */}
       <ModuleHeader title="Projects" description="WORKSPACE" icon="🚀">
         <button
-          className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-100 rounded-lg text-sm font-semibold transition-all duration-200 border border-slate-700 flex items-center gap-2 shadow-lg shadow-black/40 hover:scale-[1.02] active:scale-[0.98]"
+          className="px-5 py-2.5 bg-surface hover:bg-surface text-fg rounded-lg text-sm font-semibold transition duration-200 border border-stroke flex items-center gap-2 shadow-lg shadow-black/40 hover:scale-[1.02] active:scale-[0.98]"
           onClick={() => setShowSummary(true)}
           title="Daily log summary"
         >

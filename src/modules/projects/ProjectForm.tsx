@@ -114,12 +114,12 @@ const ProjectForm = ({
   return (
     <div className="glass-panel h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+      <div className="flex items-center justify-between border-b border-stroke px-5 py-4">
         <div>
           <p className="text-lg font-semibold">
             {mode === "create" ? "New Project" : "Edit Project"}
           </p>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-fg-muted">
             {mode === "create"
               ? "Add a new project to your workspace."
               : initial?.name
@@ -170,14 +170,14 @@ const ProjectForm = ({
       <form className="p-5 space-y-4 flex-1 overflow-y-auto" onSubmit={submit}>
         {/* Name field */}
         <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-slate-300">
+          <span className="text-sm font-medium text-fg-secondary">
             Name <span className="text-rose-400">*</span>
           </span>
           <input
-            className={`w-full rounded-lg border bg-surface px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary transition ${
+            className={`w-full rounded-lg border bg-surface px-3 py-2 text-fg focus:outline-none focus:ring-2 focus:ring-primary transition ${
               validationError && !name.trim()
                 ? "border-rose-600 focus:ring-rose-500"
-                : "border-slate-700"
+                : "border-stroke"
             }`}
             placeholder="e.g. Mobile App Redesign"
             value={name}
@@ -191,9 +191,9 @@ const ProjectForm = ({
 
         {/* Description field */}
         <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-slate-300">Description</span>
+          <span className="text-sm font-medium text-fg-secondary">Description</span>
           <textarea
-            className="w-full rounded-lg border border-slate-700 bg-surface px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary transition resize-none"
+            className="w-full rounded-lg border border-stroke bg-surface px-3 py-2 text-fg focus:outline-none focus:ring-2 focus:ring-primary transition resize-none"
             placeholder="Brief description of this project..."
             rows={4}
             value={description}
@@ -203,9 +203,9 @@ const ProjectForm = ({
 
         {/* Status field */}
         <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-slate-300">Status</span>
+          <span className="text-sm font-medium text-fg-secondary">Status</span>
           <select
-            className="w-full rounded-lg border border-slate-700 bg-surface px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary transition"
+            className="w-full rounded-lg border border-stroke bg-surface px-3 py-2 text-fg focus:outline-none focus:ring-2 focus:ring-primary transition"
             value={status}
             onChange={(e) => setStatus(e.target.value as ProjectStatus)}
           >
@@ -250,7 +250,7 @@ const ProjectForm = ({
           {mode === "edit" && onDelete && (
             <button
               type="button"
-              className={`btn-ghost text-sm transition-all ${
+              className={`btn-ghost text-sm transition ${
                 confirmDelete
                   ? "text-rose-200 border-rose-600 bg-rose-900/40 hover:bg-rose-800/50"
                   : "text-rose-400 border-rose-800 hover:bg-rose-900/30"
@@ -265,7 +265,7 @@ const ProjectForm = ({
           {confirmDelete && (
             <button
               type="button"
-              className="btn-ghost text-sm text-slate-400"
+              className="btn-ghost text-sm text-fg-muted"
               onClick={() => setConfirmDelete(false)}
             >
               Cancel

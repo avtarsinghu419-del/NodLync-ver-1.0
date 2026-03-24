@@ -65,7 +65,7 @@ export default function DashboardCalendarCard({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-lg">📅</span>
-          <h3 className="font-semibold text-slate-200 text-sm">{monthLabel}</h3>
+          <h3 className="font-semibold text-fg-secondary text-sm">{monthLabel}</h3>
         </div>
         <div className="flex items-center gap-2">
           <button type="button" className="btn-ghost text-xs" disabled>
@@ -77,7 +77,7 @@ export default function DashboardCalendarCard({
         </div>
       </div>
 
-      <div className="grid grid-cols-7 gap-1 text-xs text-slate-500">
+      <div className="grid grid-cols-7 gap-1 text-xs text-fg-muted">
         {dayNames.map((n, idx) => (
           <div key={`${n}-${idx}`} className="text-center">
             {n}
@@ -98,11 +98,11 @@ export default function DashboardCalendarCard({
           const isPast = clickedDate.getTime() < todayDate.getTime();
           const isSelected = selectedDay === c.day;
 
-          let bgClasses = "text-slate-300 hover:bg-slate-800/30";
+          let bgClasses = "text-fg-secondary hover:bg-surface/30";
           if (isToday) {
             bgClasses = "bg-primary/20 border-primary/50 text-primary font-bold shadow-[0_0_8px_rgba(56,189,248,0.3)]";
           } else if (isSelected) {
-            bgClasses = "bg-primary text-slate-900 font-bold shadow-sm";
+            bgClasses = "bg-primary text-on-primary font-bold shadow-sm";
           } else if (isHighlighted) {
             bgClasses = "bg-primary/10 border-primary/30 text-primary";
           }
@@ -130,13 +130,13 @@ export default function DashboardCalendarCard({
 
       {/* Add Schedule option floating/inline below */}
       {selectedDay && (
-        <div className="pt-3 border-t border-slate-800/60 flex items-center justify-between animate-in fade-in slide-in-from-top-2">
-          <span className="text-xs text-slate-400 font-medium tracking-wide">
+        <div className="pt-3 border-t border-stroke/60 flex items-center justify-between animate-in fade-in slide-in-from-top-2">
+          <span className="text-xs text-fg-muted font-medium tracking-wide">
             {new Date(year, monthIndex, selectedDay).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
           </span>
           <button 
             onClick={goToAddMeeting}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-slate-900 rounded-lg text-xs font-bold hover:brightness-110 transition-all active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-on-primary rounded-lg text-xs font-bold hover:brightness-110 transition active:scale-95"
           >
             <span>➕</span> Add Schedule
           </button>
@@ -145,4 +145,3 @@ export default function DashboardCalendarCard({
     </div>
   );
 }
-

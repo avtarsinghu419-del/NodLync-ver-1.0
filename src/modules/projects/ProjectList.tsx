@@ -58,7 +58,7 @@ const ProjectList = ({
 
   return (
     <div className="glass-panel h-full flex flex-col">
-      <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3 gap-3">
+      <div className="flex items-center justify-between border-b border-stroke px-4 py-3 gap-3">
         <p className="font-semibold">Projects</p>
         <button className="btn-primary text-sm" onClick={onCreate} title="Create a new project">
           + New
@@ -76,7 +76,7 @@ const ProjectList = ({
       </div>
 
       {projects.length > 0 ? (
-        <div className="flex items-center gap-3 px-4 pt-3 text-sm text-slate-400">
+        <div className="flex items-center gap-3 px-4 pt-3 text-sm text-fg-muted">
           <IndeterminateCheckbox
             checked={pageState.checked}
             indeterminate={pageState.indeterminate}
@@ -89,16 +89,16 @@ const ProjectList = ({
 
       <div className="flex-1 overflow-y-auto divide-y divide-slate-800 mt-3">
         {loading ? (
-          <div className="p-4 flex items-center gap-2 text-sm text-slate-400">
+          <div className="p-4 flex items-center gap-2 text-sm text-fg-muted">
             <InlineSpinner />
             <span>Loading projects...</span>
           </div>
         ) : null}
 
         {!loading && projects.length === 0 ? (
-          <div className="p-6 text-sm text-slate-400 space-y-3 flex flex-col items-center text-center">
+          <div className="p-6 text-sm text-fg-muted space-y-3 flex flex-col items-center text-center">
             <div className="text-3xl">Folder</div>
-            <p className="font-medium text-slate-300">No projects yet</p>
+            <p className="font-medium text-fg-secondary">No projects yet</p>
             <p>Create your first project to get started.</p>
             <button className="btn-primary text-sm" onClick={onCreate}>
               Create project
@@ -112,8 +112,8 @@ const ProjectList = ({
               return (
                 <div
                   key={project.id}
-                  className={`flex items-center gap-3 px-4 py-3 transition-all duration-150 group relative ${
-                    isSelected ? "bg-primary/10 border-l-2 border-primary" : "hover:bg-slate-800/70 border-l-2 border-transparent"
+                  className={`flex items-center gap-3 px-4 py-3 transition duration-150 group relative ${
+                    isSelected ? "bg-primary/10 border-l-2 border-primary" : "hover:bg-surface/70 border-l-2 border-transparent"
                   }`}
                 >
                   <input
@@ -131,20 +131,25 @@ const ProjectList = ({
                       title="Single click to edit. Double click to open full view."
                     >
                       <div className="flex items-center gap-2 mb-1">
-                        <p className={`font-medium truncate text-sm ${isSelected ? "text-primary" : "text-slate-200"}`}>
+                        <p className={`font-medium truncate text-sm ${isSelected ? "text-primary" : "text-fg-secondary"}`}>
                           {project.name}
                         </p>
+                        {project.is_shared ? (
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest border border-sky-500/30 bg-sky-500/10 text-sky-300">
+                            Shared
+                          </span>
+                        ) : null}
                         <StatusBadge status={project.status} />
                       </div>
                       {project.description ? (
-                        <p className="text-xs text-slate-400 truncate leading-relaxed">{project.description}</p>
+                        <p className="text-xs text-fg-muted truncate leading-relaxed">{project.description}</p>
                       ) : (
-                        <p className="text-[10px] text-slate-600 italic">No description</p>
+                        <p className="text-[10px] text-fg-muted italic">No description</p>
                       )}
                     </button>
 
                     <button
-                      className="btn-ghost p-2 text-[10px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all hover:bg-primary/20 hover:text-primary whitespace-nowrap bg-slate-900/50 border border-slate-800 rounded-lg shadow-lg"
+                      className="btn-ghost p-2 text-[10px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 transition hover:bg-primary/20 hover:text-primary whitespace-nowrap bg-panel/50 border border-stroke rounded-lg shadow-lg"
                       onClick={(e) => {
                         e.stopPropagation();
                         navigate(`/projects/${project.id}`);
@@ -172,8 +177,8 @@ const ProjectList = ({
             onPageSizeChange={pagination.setPageSize}
             itemLabel="projects"
           />
-          <div className="border-t border-slate-800 px-4 py-2 text-xs text-slate-500">
-            {projects.length} project{projects.length !== 1 ? "s" : ""} · <span className="text-slate-600">single click = edit · double click = full view</span>
+          <div className="border-t border-stroke px-4 py-2 text-xs text-fg-muted">
+            {projects.length} project{projects.length !== 1 ? "s" : ""} · <span className="text-fg-muted">single click = edit · double click = full view</span>
           </div>
         </>
       ) : null}

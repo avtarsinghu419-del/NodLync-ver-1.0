@@ -3,7 +3,7 @@
 -- 1. Unified Workflows Table
 -- workflow_type: 'visual' (React Flow) or 'imported' (n8n JSON)
 CREATE TABLE IF NOT EXISTS workflows_v2 (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL DEFAULT 'New Workflow',
   workflow_type TEXT DEFAULT 'visual' CHECK (workflow_type IN ('visual', 'imported')),
