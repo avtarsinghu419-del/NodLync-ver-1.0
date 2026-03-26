@@ -13,7 +13,7 @@ import ModuleHeader from "../components/ModuleHeader";
 
 const SettingsPage = () => {
   const user = useAppStore((s) => s.user);
-  
+
   // App store states
   const appSettings = useAppStore((s) => s.appSettings);
   const userProfile = useAppStore((s) => s.userProfile);
@@ -24,7 +24,7 @@ const SettingsPage = () => {
 
   const location = useLocation();
   const navigate = useNavigate();
-  
+
   const [activeTab, setActiveTab] = useState<"general" | "profile" | "logs" | "ai" | "about">("general");
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [loadingKeys, setLoadingKeys] = useState(false);
@@ -32,7 +32,7 @@ const SettingsPage = () => {
   const [loggingOut, setLoggingOut] = useState(false);
   const [clearingLogs, setClearingLogs] = useState(false);
   const [savingSettingKey, setSavingSettingKey] = useState<string | null>(null);
-  
+
   // AI Keys state
   const [apiKeys, setApiKeys] = useState<any[]>([]);
 
@@ -240,7 +240,7 @@ const SettingsPage = () => {
                   {uniqueModules.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
                 <select value={logSortDir} onChange={(e) => setLogSortDir(e.target.value as any)} className="bg-surface border border-stroke text-sm rounded px-3 py-1.5 outline-none">
-                   <option value="desc">Newest</option><option value="asc">Oldest</option>
+                  <option value="desc">Newest</option><option value="asc">Oldest</option>
                 </select>
               </div>
               <div className="flex gap-2">
@@ -260,11 +260,11 @@ const SettingsPage = () => {
               }
             </div>
             {filteredLogs.length > 0 && (
-              <PaginationControls 
-                {...logsPagination} 
+              <PaginationControls
+                {...logsPagination}
                 onPageChange={logsPagination.setCurrentPage}
                 onPageSizeChange={logsPagination.setPageSize}
-                itemLabel="logs" 
+                itemLabel="logs"
               />
             )}
           </div>
@@ -282,11 +282,11 @@ const SettingsPage = () => {
               </select>
             </label>
             {apiKeys.length > 0 && (
-              <PaginationControls 
-                {...apiKeysPagination} 
+              <PaginationControls
+                {...apiKeysPagination}
                 onPageChange={apiKeysPagination.setCurrentPage}
                 onPageSizeChange={apiKeysPagination.setPageSize}
-                itemLabel="keys" 
+                itemLabel="keys"
               />
             )}
             <button onClick={() => navigate("/api-vault")} className="text-sm text-primary hover:underline font-medium">→ Manage keys in API Vault</button>
@@ -307,8 +307,8 @@ const SettingsPage = () => {
               <h3 className="text-sm font-bold uppercase tracking-widest text-fg-muted">The Developers</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {[
-                  { name: "Shubham Jakhmola", role: "Full Stack Developer", icon: "S", color: "bg-primary/20 text-primary" },
-                  { name: "Avtar", role: "Project Contributor", icon: "A", color: "bg-emerald-400/20 text-emerald-400" },
+                  { name: "Shubham Jakhmola", role: "", icon: "S", color: "bg-primary/20 text-primary" },
+                  { name: "Avtar Singh", role: "", icon: "A", color: "bg-emerald-400/20 text-emerald-400" },
                 ].map(dev => (
                   <div key={dev.name} className="flex items-center gap-4 p-4 bg-surface/50 border border-stroke rounded-2xl group hover:border-primary/30 transition-all">
                     <div className="w-12 h-12 rounded-full border-2 border-stroke-strong flex items-center justify-center overflow-hidden">
