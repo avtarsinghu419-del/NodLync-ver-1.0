@@ -69,32 +69,37 @@ const Sidebar = ({ onClose }: { onClose?: () => void }) => {
 
   const handleNavClick = (to: string) => {
     navigate(to);
-    if (onClose) onClose();
+    onClose?.();
   };
 
   return (
-    <aside className="w-72 sm:w-80 lg:w-64 h-full bg-surface border-r border-stroke p-6 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
-      <div className="flex items-center justify-between lg:justify-start gap-4 px-2">
+    <aside className="flex h-full w-72 flex-col gap-6 overflow-y-auto border-r border-stroke bg-surface p-6 custom-scrollbar sm:w-80 lg:w-64">
+      <div className="flex items-center justify-between gap-4 px-2 lg:justify-start">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 flex items-center justify-center shrink-0">
-            <img src="/favicon.svg" alt="NodLync Logo" className="w-full h-full object-contain drop-shadow-[0_0_8px_rgba(56,189,248,0.5)]" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center">
+            <img
+              src="/favicon.svg"
+              alt="NodLync Logo"
+              className="h-full w-full object-contain drop-shadow-[0_0_8px_rgba(56,189,248,0.5)]"
+            />
           </div>
           <div className="min-w-0">
             <p className="text-xl font-bold tracking-tight text-fg">NodLync</p>
-            <p className="text-[10px] text-fg-muted uppercase tracking-widest font-bold">AI ops workspace</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-fg-muted">AI ops workspace</p>
           </div>
         </div>
-        {onClose && (
-          <button 
+        {onClose ? (
+          <button
+            type="button"
             onClick={onClose}
-            className="lg:hidden p-2 hover:bg-panel rounded-lg text-fg-muted font-bold"
+            className="rounded-xl p-2 font-bold text-fg-muted hover:bg-panel lg:hidden"
           >
             ✕
           </button>
-        )}
+        ) : null}
       </div>
 
-      <nav className="flex-1 mt-2">
+      <nav className="mt-2 flex-1">
         <ul className="space-y-1.5 font-medium">
           {navItems.map((item) => (
             <li key={item.to}>
@@ -107,55 +112,54 @@ const Sidebar = ({ onClose }: { onClose?: () => void }) => {
                   }
                 }}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-semibold transition duration-200 group ${
+                  `group flex items-center gap-3 rounded-xl border px-4 py-2.5 text-sm font-semibold transition duration-200 ${
                     isActive
-                      ? "bg-primary/10 text-primary border border-primary/20 shadow-[0_0_15px_rgba(56,189,248,0.1)]"
-                      : "text-fg-muted hover:bg-panel/80 hover:text-fg-secondary border border-transparent"
+                      ? "border-primary/20 bg-primary/10 text-primary shadow-[0_0_15px_rgba(56,189,248,0.1)]"
+                      : "border-transparent text-fg-muted hover:bg-panel/80 hover:text-fg-secondary"
                   }`
                 }
                 end={item.to === "/"}
               >
-                <div className={`transition-transform duration-200 group-hover:scale-110`}>
-                   <item.Icon />
+                <div className="transition-transform duration-200 group-hover:scale-110">
+                  <item.Icon />
                 </div>
                 <span>{item.label}</span>
               </NavLink>
             </li>
           ))}
-          </ul>
-        </nav>
+        </ul>
+      </nav>
 
-        {/* Profile Block at Bottom */}
-        <div
-          onClick={() => {
-            navigate("/settings?tab=profile");
-            if (onClose) onClose();
-          }}
-          className="mt-6 border-t border-stroke pt-6 flex items-center gap-4 px-2 cursor-pointer group"
-        >
-          <div className="w-11 h-11 rounded-full bg-panel border-2 border-stroke shrink-0 overflow-hidden flex items-center justify-center relative group-hover:border-primary/50 transition-colors">
-            {userProfile?.avatar_url ? (
-              <img src={userProfile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
-            ) : (
-              <span className="text-primary font-bold text-sm tracking-wider uppercase">
-                {userProfile?.display_name?.charAt(0) || user?.email?.charAt(0) || "U"}
-              </span>
-            )}
-            <div className="absolute inset-x-0 bottom-0 h-1/3 bg-black/40 backdrop-blur-sm flex items-center justify-center translate-y-full group-hover:translate-y-0 transition-transform">
-               <span className="text-[6px] text-white font-bold tracking-tighter">EDIT</span>
-            </div>
-          </div>
-          <div className="flex-1 min-w-0 pr-2">
-            <p className="text-sm font-bold truncate text-fg-secondary group-hover:text-primary transition-colors">
-              {userProfile?.display_name || "User"}
-            </p>
-            <p className="text-[10px] text-fg-muted font-bold truncate uppercase tracking-widest mt-0.5">
-              My Profile ➔
-            </p>
+      <div
+        onClick={() => {
+          navigate("/settings?tab=profile");
+          onClose?.();
+        }}
+        className="mt-6 flex cursor-pointer items-center gap-4 border-t border-stroke px-2 pt-6 group"
+      >
+        <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-stroke bg-panel transition-colors group-hover:border-primary/50">
+          {userProfile?.avatar_url ? (
+            <img src={userProfile.avatar_url} alt="Profile" className="h-full w-full object-cover" />
+          ) : (
+            <span className="text-sm font-bold tracking-wider uppercase text-primary">
+              {userProfile?.display_name?.charAt(0) || user?.email?.charAt(0) || "U"}
+            </span>
+          )}
+          <div className="absolute inset-x-0 bottom-0 flex h-1/3 items-center justify-center bg-black/40 translate-y-full backdrop-blur-sm transition-transform group-hover:translate-y-0">
+            <span className="text-[6px] font-bold tracking-tighter text-white">EDIT</span>
           </div>
         </div>
-      </aside>
-    );
-  };
+        <div className="min-w-0 flex-1 pr-2">
+          <p className="truncate text-sm font-bold text-fg-secondary transition-colors group-hover:text-primary">
+            {userProfile?.display_name || "User"}
+          </p>
+          <p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-widest text-fg-muted">
+            My Profile ➔
+          </p>
+        </div>
+      </div>
+    </aside>
+  );
+};
 
-  export default Sidebar;
+export default Sidebar;

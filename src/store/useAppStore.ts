@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import type { AppUser, Project } from "../types";
+import { persist, createJSONStorage } from "zustand/middleware";
+import type { AppSettings, AppUser, Project, SystemLogEntry, UserProfile } from "../types";
 
 interface AppState {
   user: AppUser | null;
@@ -20,16 +21,18 @@ interface AppState {
   resetProjects: () => void;
 
   // New states for User Preferences
-  userProfile: any | null;
-  appSettings: any | null;
-  appLogs: any[];
-  setUserProfile: (profile: any | null) => void;
-  setAppSettings: (settings: any | null) => void;
-  setAppLogs: (logs: any[]) => void;
-  addAppLog: (log: any) => void;
+  userProfile: UserProfile | null;
+  appSettings: AppSettings | null;
+  appLogs: SystemLogEntry[];
+  setUserProfile: (profile: UserProfile | null) => void;
+  setAppSettings: (settings: AppSettings | null) => void;
+  setAppLogs: (logs: SystemLogEntry[]) => void;
+  addAppLog: (log: SystemLogEntry) => void;
 }
 
-const useAppStore = create<AppState>((set, get) => ({
+const useAppStore = create<AppState>()(
+  persist(
+    (set, get) => ({
   user: null,
   projects: [],
   selectedProject: null,
@@ -38,17 +41,14 @@ const useAppStore = create<AppState>((set, get) => ({
   projectsError: null,
   setUser: (user) => set({ user }),
   setProjects: (projects) => {
-    console.log("[Store] setProjects:", projects.length);
     set({ projects });
   },
   addProject: (project) =>
     set((state) => {
-      console.log("[Store] addProject:", project.id);
       return { projects: [project, ...state.projects] };
     }),
   updateProject: (project) =>
     set((state) => {
-      console.log("[Store] updateProject:", project.id);
       return {
         projects: state.projects.map((p) => (p.id === project.id ? project : p)),
         selectedProject:
@@ -57,7 +57,6 @@ const useAppStore = create<AppState>((set, get) => ({
     }),
   removeProject: (id) =>
     set((state) => {
-      console.log("[Store] removeProject:", id);
       return {
         projects: state.projects.filter((p) => p.id !== id),
         selectedProject:
@@ -65,12 +64,10 @@ const useAppStore = create<AppState>((set, get) => ({
       };
     }),
   setSelectedProject: (project) => {
-    console.log("[Store] setSelectedProject:", project?.id ?? "null");
     set({ selectedProject: project, isCreateMode: false });
   },
   setIsCreateMode: (val) =>
     set(() => {
-      console.log("[Store] setIsCreateMode:", val);
       return {
         isCreateMode: val,
         selectedProject: val ? null : get().selectedProject,
@@ -93,7 +90,23 @@ const useAppStore = create<AppState>((set, get) => ({
   setUserProfile: (userProfile) => set({ userProfile }),
   setAppSettings: (appSettings) => set({ appSettings }),
   setAppLogs: (appLogs) => set({ appLogs }),
-  addAppLog: (log) => set((state) => ({ appLogs: [log, ...state.appLogs] })),
-}));
+  addAppLog: (log) =>
+    set((state) => ({ appLogs: [log, ...state.appLogs].slice(0, 200) })),
+    }),
+    {
+      name: "nodlync-app-store",
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        user: state.user,
+        projects: state.projects,
+        selectedProject: state.selectedProject,
+        isCreateMode: state.isCreateMode,
+        userProfile: state.userProfile,
+        appSettings: state.appSettings,
+        appLogs: state.appLogs,
+      }),
+    }
+  )
+);
 
 export default useAppStore;

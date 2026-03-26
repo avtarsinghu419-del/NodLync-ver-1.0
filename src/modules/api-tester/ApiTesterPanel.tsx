@@ -659,13 +659,13 @@ const ApiTesterPanel = () => {
               onChange={(e) => handleUrlChange(e.target.value)}
             />
             <button
-              className={`btn-primary px-6 py-2 text-sm font-semibold flex items-center justify-center gap-2 ${
+              className={`btn-primary min-w-[7rem] px-6 py-2 text-sm font-semibold flex items-center justify-center gap-2 ${
                 (!canSend || loading) ? "opacity-60 cursor-not-allowed" : ""
               }`}
               onClick={sendRequest}
               disabled={!canSend || loading}
             >
-              {loading ? "Sending..." : "Send"}
+              <span className="whitespace-nowrap">{loading ? "Sending..." : "Send"}</span>
             </button>
             <button
               type="button"

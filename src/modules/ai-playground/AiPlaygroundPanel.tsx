@@ -7,6 +7,7 @@ import {
   getModelOptions,
   isAiProvider,
   sendChatMessage,
+  sortModelsPreferFree,
   type ChatMessage,
 } from "../../api/aiPlaygroundApi";
 import {
@@ -15,6 +16,7 @@ import {
   saveLikedIdea,
   type LikedIdea,
 } from "../../api/likedIdeasApi";
+import { createUserItem } from "../../api/userItemsApi";
 import InlineSpinner from "../../components/InlineSpinner";
 import ModuleHeader from "../../components/ModuleHeader";
 import GeneratedText from "../../components/GeneratedText";
@@ -26,6 +28,7 @@ import usePlaygroundStore, {
 } from "../../store/usePlaygroundStore";
 import { Link } from "react-router-dom";
 import { normalizeGeneratedText } from "../../utils/generatedText";
+import { logAppEvent } from "../../utils/appLogger";
 
 function genId() {
   return Math.random().toString(36).slice(2, 10);
@@ -34,7 +37,7 @@ function genId() {
 function getProviderDefaultModel(apiId: string, aiItems: ApiVaultItem[]) {
   const item = aiItems.find((entry) => entry.id === apiId);
   const cfg = item ? detectProvider(item) : undefined;
-  return cfg?.defaultModel ?? getDefaultModel(cfg?.id ?? "openai");
+  return getModelOptions(cfg?.id ?? "openai")[0]?.value ?? cfg?.defaultModel ?? getDefaultModel(cfg?.id ?? "openai");
 }
 
 function getDefaultApiId(aiItems: ApiVaultItem[], defaultProvider: string) {
@@ -135,10 +138,21 @@ const ModelSelector = ({
       }
 
       setLoading(true);
-      const models = await fetchOpenRouterModels();
-      if (!cancelled) {
-        setOpenRouterModels(models);
-        setLoading(false);
+      try {
+        const models = await fetchOpenRouterModels();
+        if (!cancelled) {
+          setOpenRouterModels(models);
+        }
+      } catch (error: any) {
+        console.error("Failed to load OpenRouter models", error);
+        void logAppEvent({
+          type: "error",
+          module: "ai-playground.models",
+          message: error?.message ?? "Failed to load OpenRouter models.",
+        });
+        if (!cancelled) setOpenRouterModels([]);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     }
 
@@ -154,14 +168,7 @@ const ModelSelector = ({
       ? openRouterModels
       : getModelOptions(cfg?.id ?? "openai");
 
-  const options = [...baseOptions].sort((a, b) => {
-    const score = (label: string) =>
-      (label.toLowerCase().includes("free") ? 2 : 0) +
-      (label.toLowerCase().includes("mini") ? 1 : 0) +
-      (label.toLowerCase().includes("small") ? 0.5 : 0) +
-      (label.toLowerCase().includes("flash") ? 0.25 : 0);
-    return score(b.label) - score(a.label);
-  });
+  const options = sortModelsPreferFree(baseOptions);
 
   return (
     <div className={`flex items-center gap-2 ${compact ? "" : "flex-wrap"}`}>
@@ -183,7 +190,7 @@ const ModelSelector = ({
         </select>
         {loading && (
           <div className="absolute right-2 pointer-events-none">
-            <InlineSpinner />
+            <InlineSpinner compact />
           </div>
         )}
       </div>
@@ -194,6 +201,7 @@ const ModelSelector = ({
 const MessageBubble = ({ msg }: { msg: ChatMessage }) => {
   const isUser = msg.role === "user";
   const content = isUser ? msg.content : normalizeGeneratedText(msg.content);
+  const isMediaUrl = !isUser && /^(https?:\/\/|data:image\/)/i.test(content.trim());
 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"} gap-2`}>
@@ -203,13 +211,21 @@ const MessageBubble = ({ msg }: { msg: ChatMessage }) => {
         </div>
       )}
       <div
-        className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap break-words ${
-          isUser
+        className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap break-words ${isUser
             ? "bg-primary text-on-primary font-medium rounded-tr-sm"
             : "bg-surface/80 text-fg-secondary border border-stroke/50 rounded-tl-sm"
-        }`}
+          }`}
       >
-        {content}
+        {isMediaUrl ? (
+          <div className="space-y-3">
+            <img src={content.trim()} alt="Generated result" className="max-w-full rounded-xl border border-stroke" />
+            <a href={content.trim()} target="_blank" rel="noreferrer" className="block text-xs text-primary hover:underline break-all">
+              Open generated media
+            </a>
+          </div>
+        ) : (
+          content
+        )}
       </div>
       {isUser && (
         <div className="flex-shrink-0 w-7 h-7 rounded-full bg-surface border border-stroke-strong flex items-center justify-center text-xs text-fg-secondary font-bold mt-0.5">
@@ -247,6 +263,7 @@ const AiChatTab = ({
   const chat = usePlaygroundStore((state) => state.chat);
   const setChat = usePlaygroundStore((state) => state.setChat);
   const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState<"chat" | "image" | "video">("chat");
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -272,6 +289,36 @@ const AiChatTab = ({
 
   const selectedApi = aiItems.find((item) => item.id === chat.apiId) ?? null;
   const cfg = selectedApi ? detectProvider(selectedApi) : undefined;
+  const lastAssistantMessage =
+    [...chat.messages].reverse().find((m) => m.role === "assistant")?.content ?? "";
+
+  function downloadText(filename: string, content: string) {
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportConversation() {
+    const lines: string[] = [];
+    lines.push(`# NodLync Chat Export`);
+    lines.push(`- Provider: ${cfg?.label ?? "Unknown"}`);
+    lines.push(`- Model: ${chat.model || "(unset)"}`);
+    lines.push(`- Exported: ${new Date().toISOString()}`);
+    lines.push("");
+    chat.messages.forEach((m) => {
+      lines.push(`## ${m.role.toUpperCase()}`);
+      lines.push(m.content);
+      lines.push("");
+    });
+    downloadText(
+      `nodlync_chat_${new Date().toISOString().slice(0, 10)}.md`,
+      lines.join("\n")
+    );
+  }
 
   async function send() {
     if (!chat.input.trim() || !selectedApi || loading) return;
@@ -296,7 +343,13 @@ const AiChatTab = ({
         apiItem: selectedApi,
         model: chat.model,
         messages: nextMessages,
-        systemPrompt: "You are a helpful AI assistant. Be concise and accurate.",
+        systemPrompt:
+          mode === "chat"
+            ? "You are a helpful AI assistant. Be concise and accurate."
+            : mode === "image"
+            ? "You generate concise image prompts and return only the best prompt or generated media."
+            : "You create concise video concepts, storyboards, and shot lists.",
+        mode,
       });
 
       setChat({
@@ -310,8 +363,29 @@ const AiChatTab = ({
           },
         ],
       });
+
+      void logAppEvent({
+        type: "success",
+        module: "ai-playground.chat",
+        message: "Chat response generated.",
+        projectId: useAppStore.getState().selectedProject?.id ?? undefined,
+        meta: {
+          model: chat.model,
+          provider: cfg?.id ?? null,
+        },
+      });
     } catch (error: any) {
       setChat({ error: error?.message ?? "Request failed. Check your API key." });
+      void logAppEvent({
+        type: "error",
+        module: "ai-playground.chat",
+        message: error?.message ?? "Chat request failed.",
+        projectId: useAppStore.getState().selectedProject?.id ?? undefined,
+        meta: {
+          model: chat.model,
+          provider: cfg?.id ?? null,
+        },
+      });
     } finally {
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 80);
@@ -321,6 +395,26 @@ const AiChatTab = ({
   return (
     <div className="flex flex-col" style={{ height: "calc(100vh - 240px)" }}>
       <div className="flex items-center gap-3 px-4 py-2.5 border-b border-stroke bg-panel/30 flex-shrink-0 flex-wrap gap-y-2">
+        <div className="flex items-center gap-2 rounded-full border border-stroke bg-surface/50 p-1">
+          {[
+            { id: "chat", label: "Text" },
+            { id: "image", label: "Image" },
+            { id: "video", label: "Video" },
+          ].map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => setMode(option.id as "chat" | "image" | "video")}
+              className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                mode === option.id
+                  ? "bg-primary text-on-primary"
+                  : "text-fg-muted hover:text-fg-secondary"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
         <ApiSelector
           aiItems={aiItems}
           value={chat.apiId}
@@ -371,8 +465,6 @@ const AiChatTab = ({
         {chat.messages.length === 0 && !loading && (
           <div className="flex flex-col items-center justify-center h-full gap-3 opacity-30 select-none">
             <div className="text-4xl">Chat</div>
-            <p className="text-fg-muted text-sm font-medium">Start a conversation</p>
-            <p className="text-fg-muted text-xs">Enter to send. Shift+Enter for newline.</p>
           </div>
         )}
         {chat.messages.map((message) => (
@@ -383,6 +475,29 @@ const AiChatTab = ({
       </div>
 
       <div className="flex-shrink-0 border-t border-stroke bg-panel/40 px-4 py-3">
+        <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={exportConversation}
+              disabled={chat.messages.length === 0 || loading}
+              className="btn-ghost text-xs disabled:opacity-50"
+            >
+              Export .md
+            </button>
+            <button
+              type="button"
+              onClick={() => downloadText("last_answer.txt", lastAssistantMessage)}
+              disabled={!lastAssistantMessage || loading}
+              className="btn-ghost text-xs disabled:opacity-50"
+            >
+              Download last answer
+            </button>
+          </div>
+          <div className="text-[10px] text-fg-muted font-mono">
+            {cfg?.label ?? "AI"} • {chat.model || "model"}
+          </div>
+        </div>
         <div className="flex items-end gap-3 bg-surface/60 border border-stroke rounded-xl px-4 py-3 focus-within:border-primary/60 transition-colors">
           <textarea
             ref={inputRef}
@@ -394,7 +509,13 @@ const AiChatTab = ({
                 void send();
               }
             }}
-            placeholder="Type a message..."
+            placeholder={
+              mode === "chat"
+                ? "Type a message..."
+                : mode === "image"
+                ? "Describe the image you want..."
+                : "Describe the video scene you want..."
+            }
             rows={1}
             disabled={loading}
             className="flex-1 bg-transparent text-sm text-fg resize-none focus:outline-none placeholder:text-fg-muted min-h-[24px] max-h-[160px] leading-relaxed"
@@ -409,7 +530,7 @@ const AiChatTab = ({
             disabled={!chat.input.trim() || loading}
             className="flex-shrink-0 w-9 h-9 bg-primary disabled:opacity-30 rounded-lg flex items-center justify-center hover:brightness-110 active:scale-95 transition"
           >
-            {loading ? <InlineSpinner /> : "Go"}
+            {loading ? <InlineSpinner compact /> : "➤"}
           </button>
         </div>
         <p className="text-[10px] text-fg-muted mt-1 text-right">
@@ -500,6 +621,7 @@ const IdeaGeneratorTab = ({
   const [loadingLiked, setLoadingLiked] = useState(false);
   const [viewingLiked, setViewingLiked] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [savingToStuffId, setSavingToStuffId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!aiItems.length) return;
@@ -585,8 +707,28 @@ Output format (EXACTLY):
           ? parsed
           : [{ id: genId(), title: "Raw Output", description: reply }],
       });
+      void logAppEvent({
+        type: "success",
+        module: "ai-playground.ideas",
+        message: "Ideas generated.",
+        projectId: useAppStore.getState().selectedProject?.id ?? undefined,
+        meta: {
+          model: ideasState.model,
+          provider: detectProvider(selectedApi)?.id ?? null,
+        },
+      });
     } catch (error: any) {
       setIdeas({ error: error?.message ?? "Failed to generate ideas." });
+      void logAppEvent({
+        type: "error",
+        module: "ai-playground.ideas",
+        message: error?.message ?? "Idea generation failed.",
+        projectId: useAppStore.getState().selectedProject?.id ?? undefined,
+        meta: {
+          model: ideasState.model,
+          provider: detectProvider(selectedApi)?.id ?? null,
+        },
+      });
     } finally {
       setLoading(false);
     }
@@ -615,6 +757,35 @@ Output format (EXACTLY):
     await deleteLikedIdea(id);
     setLikedIdeas((current) => current.filter((idea) => idea.id !== id));
     setDeletingId(null);
+  }
+
+  async function handleSaveToStuff(idea: PlaygroundIdeaItem) {
+    if (!userId || savingToStuffId) return;
+    setSavingToStuffId(idea.id);
+    try {
+      const response = await createUserItem({
+        user_id: userId,
+        type: "template",
+        title: idea.title,
+        description: idea.description,
+        data: {
+          route: "/ai-playground",
+          source: "ai-playground.idea",
+          context: ideasState.context,
+          providerApiId: ideasState.apiId,
+          model: ideasState.model,
+          idea,
+        },
+        tags: ["idea", "template", "ai-playground"],
+      });
+
+      if (response.error) throw new Error(response.error.message);
+      window.alert("Idea saved to My Stuff.");
+    } catch (error: any) {
+      window.alert(error?.message ?? "Failed to save idea.");
+    } finally {
+      setSavingToStuffId(null);
+    }
   }
 
   return (
@@ -658,11 +829,11 @@ Output format (EXACTLY):
           <button
             onClick={() => void generate()}
             disabled={loading || !selectedApi}
-            className="btn-primary flex-1 py-2.5 text-sm font-bold disabled:opacity-50"
+            className="btn-primary flex-1 min-w-0 py-2.5 text-sm font-bold disabled:opacity-50"
           >
             {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <InlineSpinner /> Generating...
+              <span className="flex min-w-0 items-center justify-center gap-2 overflow-hidden whitespace-nowrap">
+                <InlineSpinner compact /> <span className="truncate">Generating...</span>
               </span>
             ) : (
               "Generate Ideas"
@@ -670,11 +841,10 @@ Output format (EXACTLY):
           </button>
           <button
             onClick={() => setViewingLiked((current) => !current)}
-            className={`px-4 py-2.5 text-sm font-semibold rounded-lg border transition-colors ${
-              viewingLiked
+            className={`px-4 py-2.5 text-sm font-semibold rounded-lg border transition-colors ${viewingLiked
                 ? "border-primary text-primary bg-primary/10"
                 : "border-stroke text-fg-muted hover:text-fg-secondary bg-surface"
-            }`}
+              }`}
           >
             Saved {likedIdeas.length > 0 ? likedIdeas.length : ""}
           </button>
@@ -718,18 +888,26 @@ Output format (EXACTLY):
                   </p>
                   <p className="text-fg-muted text-sm leading-relaxed">{idea.description}</p>
                 </div>
-                <button
-                  onClick={() => void handleLike(idea)}
-                  disabled={isLiked || isSaving}
-                  title={isLiked ? "Saved" : "Save idea"}
-                  className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-sm transition ${
-                    isLiked
-                      ? "text-rose-400 bg-rose-500/10 border border-rose-500/20"
-                      : "text-fg-muted hover:text-rose-400 hover:bg-rose-500/10 border border-transparent"
-                  } disabled:opacity-50`}
-                >
-                  {isSaving ? <InlineSpinner /> : isLiked ? "Saved" : "Save"}
-                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    onClick={() => void handleSaveToStuff(idea)}
+                    disabled={savingToStuffId === idea.id}
+                    className="rounded-lg border border-stroke px-2.5 py-1.5 text-xs text-fg-muted transition hover:border-primary/40 hover:text-primary disabled:opacity-50"
+                  >
+                    {savingToStuffId === idea.id ? "Saving..." : "My Stuff"}
+                  </button>
+                  <button
+                    onClick={() => void handleLike(idea)}
+                    disabled={isLiked || isSaving}
+                    title={isLiked ? "Saved" : "Save idea"}
+                    className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-sm transition ${isLiked
+                        ? "text-rose-400 bg-rose-500/10 border border-rose-500/20"
+                        : "text-fg-muted hover:text-rose-400 hover:bg-rose-500/10 border border-transparent"
+                      } disabled:opacity-50`}
+                  >
+                    {isSaving ? <InlineSpinner compact /> : isLiked ? "Saved" : "Save"}
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -759,8 +937,8 @@ Output format (EXACTLY):
             </button>
           </div>
           {loadingLiked && (
-            <div className="flex items-center gap-2 text-fg-muted text-sm py-6 justify-center">
-              <InlineSpinner /> Loading...
+            <div className="flex items-center gap-2 text-fg-muted text-sm py-6 justify-center whitespace-nowrap">
+              <InlineSpinner compact /> <span>Loading...</span>
             </div>
           )}
           {!loadingLiked && likedIdeas.length === 0 && (
@@ -790,7 +968,7 @@ Output format (EXACTLY):
                 className="flex-shrink-0 w-8 h-8 rounded-lg text-fg-muted hover:text-rose-400 hover:bg-rose-500/10 flex items-center justify-center text-sm transition opacity-0 group-hover:opacity-100"
                 title="Remove"
               >
-                {deletingId === idea.id ? <InlineSpinner /> : "x"}
+                {deletingId === idea.id ? <InlineSpinner compact /> : "x"}
               </button>
             </div>
           ))}
@@ -805,32 +983,30 @@ const ResearchColumnCard = ({
   index,
   aiItems,
   totalCols,
+  canRun,
   onChangeApi,
   onChangeModel,
   onRemove,
   onGenerate,
+  onRetry,
 }: {
   col: PlaygroundResearchColumn;
   index: number;
   aiItems: ApiVaultItem[];
   totalCols: number;
+  canRun: boolean;
   onChangeApi: (id: string) => void;
   onChangeModel: (model: string) => void;
   onRemove: () => void;
   onGenerate: () => void;
+  onRetry: () => void;
 }) => {
   const selectedApi = aiItems.find((item) => item.id === col.apiId);
   const cfg = selectedApi ? detectProvider(selectedApi) : undefined;
   const isLoading = col.status === "loading";
   const hasError = col.status === "error";
-  const hasResponse = col.status === "success" && !!col.response;
-  const actionLabel = isLoading
-    ? "Running"
-    : hasError
-      ? "Retry"
-      : hasResponse
-        ? "Regenerate"
-        : "Generate";
+  const hasResponse = !!col.response;
+  const generateLabel = hasResponse ? "Regenerate" : "Generate";
 
   return (
     <div className="flex flex-col gap-3 min-w-0 flex-1" style={{ minWidth: totalCols > 2 ? 280 : 0 }}>
@@ -842,14 +1018,30 @@ const ResearchColumnCard = ({
           <div className="flex items-center gap-2">
             <button
               onClick={onGenerate}
-              disabled={isLoading}
-              className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest rounded-md border border-stroke text-fg-secondary hover:text-primary hover:border-primary/60 transition-colors disabled:opacity-50"
+              disabled={isLoading || !canRun}
+              className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest rounded-md border border-stroke text-fg-secondary hover:text-primary hover:border-primary/60 transition-colors disabled:opacity-50 whitespace-nowrap"
             >
-              {actionLabel}
+              {isLoading ? (
+                <span className="inline-flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap">
+                  <InlineSpinner compact /> <span className="truncate">Running</span>
+                </span>
+              ) : (
+                generateLabel
+              )}
             </button>
+            {hasError && (
+              <button
+                onClick={onRetry}
+                disabled={isLoading || !canRun}
+                className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest rounded-md border border-rose-800/40 text-rose-200 hover:border-rose-500/60 transition-colors disabled:opacity-50"
+              >
+                Retry
+              </button>
+            )}
             {totalCols > 1 && (
               <button
                 onClick={onRemove}
+                disabled={isLoading}
                 className="text-fg-muted hover:text-rose-400 text-xs transition-colors"
                 title="Remove column"
               >
@@ -858,7 +1050,13 @@ const ResearchColumnCard = ({
             )}
           </div>
         </div>
-        <ApiSelector aiItems={aiItems} value={col.apiId} onChange={onChangeApi} label="" compact />
+        <ApiSelector
+          aiItems={aiItems}
+          value={col.apiId}
+          onChange={onChangeApi}
+          label=""
+          compact
+        />
         <ModelSelector
           apiId={col.apiId}
           aiItems={aiItems}
@@ -874,21 +1072,22 @@ const ResearchColumnCard = ({
       </div>
 
       <div className="glass-panel flex-1 overflow-hidden flex flex-col" style={{ minHeight: 320 }}>
-        {isLoading ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-fg-muted">
-            <InlineSpinner />
-            <p className="text-xs">Asking {cfg?.label ?? "AI"}...</p>
-          </div>
-        ) : hasError ? (
-          <div className="p-4 flex-1">
-            <div className="bg-rose-950/40 border border-rose-800/40 rounded-xl p-4 text-sm text-rose-300">
-              <p className="font-bold mb-1">Error</p>
-              <p className="text-xs leading-relaxed">{col.error}</p>
-            </div>
-          </div>
-        ) : hasResponse ? (
-          <div className="p-4 flex-1 overflow-y-auto custom-scrollbar">
+        {hasResponse ? (
+          <div className="relative p-4 flex-1 overflow-y-auto custom-scrollbar">
             <GeneratedText text={col.response} className="text-sm text-fg-secondary leading-relaxed" />
+            {isLoading && (
+              <div className="absolute inset-0 bg-background/60 backdrop-blur-[1px] flex items-center justify-center">
+                <div className="flex items-center gap-2 text-xs text-fg-muted whitespace-nowrap">
+                  <InlineSpinner compact />
+                  <span>Updating...</span>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : isLoading ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-fg-muted">
+            <InlineSpinner compact />
+            <p className="text-xs whitespace-nowrap">Asking {cfg?.label ?? "AI"}...</p>
           </div>
         ) : (
           <div className="flex-1 flex items-center justify-center opacity-20 select-none">
@@ -896,6 +1095,12 @@ const ResearchColumnCard = ({
               <div className="text-3xl mb-2">AI</div>
               <p className="text-fg-muted text-xs">Response will appear here</p>
             </div>
+          </div>
+        )}
+
+        {hasError && (
+          <div className="border-t border-rose-800/30 bg-rose-950/20 px-4 py-3 text-xs text-rose-200">
+            <span className="font-bold">Error:</span> {col.error}
           </div>
         )}
       </div>
@@ -910,9 +1115,11 @@ const ResearchTab = ({
   aiItems: ApiVaultItem[];
   defaultProvider: string;
 }) => {
+  const userId = useAppStore((state) => state.user?.id ?? null);
   const research = usePlaygroundStore((state) => state.research);
   const setResearch = usePlaygroundStore((state) => state.setResearch);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [savingSummaryToStuff, setSavingSummaryToStuff] = useState(false);
 
   function createColumn(overrideApiId?: string): PlaygroundResearchColumn {
     const apiId = overrideApiId ?? getDefaultApiId(aiItems, defaultProvider);
@@ -923,6 +1130,7 @@ const ResearchTab = ({
       status: "idle",
       response: "",
       error: null,
+      runToken: undefined,
     };
   }
 
@@ -1005,7 +1213,8 @@ const ResearchTab = ({
     const column = usePlaygroundStore.getState().research.columns.find((entry) => entry.id === id);
     if (!column) return;
 
-    if (!usePlaygroundStore.getState().research.prompt.trim()) {
+    const prompt = usePlaygroundStore.getState().research.prompt.trim();
+    if (!prompt) {
       updateColumn(id, { status: "error", error: "Enter a prompt to run this model." });
       return;
     }
@@ -1016,7 +1225,8 @@ const ResearchTab = ({
       return;
     }
 
-    updateColumn(id, { status: "loading", error: null });
+    const runToken = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : genId();
+    updateColumn(id, { status: "loading", error: null, runToken });
 
     try {
       const response = await sendChatMessage({
@@ -1026,26 +1236,67 @@ const ResearchTab = ({
           {
             id: genId(),
             role: "user",
-            content: usePlaygroundStore.getState().research.prompt.trim(),
+            content: prompt,
             timestamp: new Date(),
           },
         ],
         systemPrompt: "You are a research assistant. Provide a clear, well-structured response.",
       });
+
+      const current = usePlaygroundStore.getState().research.columns.find((entry) => entry.id === id);
+      if (current?.runToken !== runToken) return;
+
       updateColumn(id, {
         status: "success",
         response: normalizeGeneratedText(response),
         error: null,
       });
+
+      void logAppEvent({
+        type: "success",
+        module: "ai-playground.research",
+        message: `Research response generated (${apiItem.key_name ?? "AI"}).`,
+        projectId: useAppStore.getState().selectedProject?.id ?? undefined,
+        meta: {
+          apiId: column.apiId,
+          model: column.model,
+          provider: detectProvider(apiItem)?.id ?? null,
+          promptChars: prompt.length,
+        },
+      });
     } catch (error: any) {
+      const current = usePlaygroundStore.getState().research.columns.find((entry) => entry.id === id);
+      if (current?.runToken !== runToken) return;
+
       updateColumn(id, {
         status: "error",
         error: error?.message ?? "Request failed.",
+      });
+      void logAppEvent({
+        type: "error",
+        module: "ai-playground.research",
+        message: error?.message ?? "Research request failed.",
+        projectId: useAppStore.getState().selectedProject?.id ?? undefined,
+        meta: {
+          apiId: column.apiId,
+          model: column.model,
+          provider: detectProvider(apiItem)?.id ?? null,
+          promptChars: prompt.length,
+        },
       });
     }
   }
 
   function runAllColumns() {
+    if (!research.prompt.trim()) {
+      research.columns.forEach((column) => {
+        updateColumn(column.id, {
+          status: "error",
+          error: "Enter a prompt to run this model.",
+        });
+      });
+      return;
+    }
     research.columns.forEach((column) => {
       void runColumn(column.id);
     });
@@ -1100,6 +1351,41 @@ Synthesize these into ONE clear, comprehensive summary:
     }
   }
 
+  async function saveSummaryToStuff() {
+    if (!userId || !research.summary.trim()) return;
+    setSavingSummaryToStuff(true);
+    try {
+      const response = await createUserItem({
+        user_id: userId,
+        type: "note",
+        title: research.prompt.trim().slice(0, 72) || "AI research summary",
+        description: "Saved research summary from AI Playground.",
+        data: {
+          route: "/ai-playground",
+          source: "ai-playground.research",
+          prompt: research.prompt,
+          summary: research.summary,
+          summaryApiId: research.summaryApiId,
+          summaryModel: research.summaryModel,
+          columns: research.columns.map((column) => ({
+            id: column.id,
+            apiId: column.apiId,
+            model: column.model,
+            response: column.response,
+            error: column.error,
+          })),
+        },
+        tags: ["research", "summary", "ai-playground", "note"],
+      });
+      if (response.error) throw new Error(response.error.message);
+      window.alert("Summary saved to My Stuff.");
+    } catch (error: any) {
+      window.alert(error?.message ?? "Failed to save summary.");
+    } finally {
+      setSavingSummaryToStuff(false);
+    }
+  }
+
   const anyResponse = research.columns.some((column) => !!column.response);
   const anyLoading = research.columns.some((column) => column.status === "loading");
   const promptRows = Math.min(5, Math.max(2, research.prompt.split("\n").length));
@@ -1130,19 +1416,19 @@ Synthesize these into ONE clear, comprehensive summary:
           }}
         />
         <div className="flex items-center gap-2">
-          <button
-            onClick={runAllColumns}
-            disabled={!research.prompt.trim() || anyLoading}
-            className="btn-primary flex-1 py-2.5 font-bold text-sm disabled:opacity-50"
-          >
-            {anyLoading ? (
-              <span className="flex items-center justify-center gap-2">
-                <InlineSpinner /> Running...
+              <button
+                onClick={runAllColumns}
+                disabled={!research.prompt.trim() || anyLoading}
+                className="btn-primary flex-1 min-w-0 py-2.5 font-bold text-sm disabled:opacity-50"
+              >
+                {anyLoading ? (
+              <span className="flex min-w-0 items-center justify-center gap-2 overflow-hidden whitespace-nowrap">
+                <InlineSpinner compact /> <span className="truncate">Running...</span>
               </span>
-            ) : (
-              `Run Research across ${research.columns.length} AIs`
-            )}
-          </button>
+                ) : (
+                  `Run Research across ${research.columns.length} AIs`
+                )}
+              </button>
           <button
             onClick={addColumn}
             disabled={research.columns.length >= 4}
@@ -1162,16 +1448,22 @@ Synthesize these into ONE clear, comprehensive summary:
             index={index}
             aiItems={aiItems}
             totalCols={research.columns.length}
+            canRun={!!research.prompt.trim()}
             onChangeApi={(apiId) =>
               updateColumn(column.id, {
                 apiId,
                 model: getProviderDefaultModel(apiId, aiItems),
                 status: "idle",
+                response: "",
+                error: null,
               })
             }
-            onChangeModel={(model) => updateColumn(column.id, { model, status: "idle" })}
+            onChangeModel={(model) =>
+              updateColumn(column.id, { model, status: "idle", response: "", error: null })
+            }
             onRemove={() => removeColumn(column.id)}
             onGenerate={() => void runColumn(column.id)}
+            onRetry={() => void runColumn(column.id)}
           />
         ))}
       </div>
@@ -1203,16 +1495,25 @@ Synthesize these into ONE clear, comprehensive summary:
               <button
                 onClick={() => void generateSummary()}
                 disabled={summaryLoading}
-                className="btn-primary text-sm py-2 px-5 font-bold disabled:opacity-50"
+                className="btn-primary min-w-0 text-sm py-2 px-5 font-bold disabled:opacity-50"
               >
                 {summaryLoading ? (
-                  <span className="flex items-center gap-2">
-                    <InlineSpinner /> Summarising...
+                  <span className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap">
+                    <InlineSpinner compact /> <span className="truncate">Summarising...</span>
                   </span>
                 ) : (
                   "Generate Summary"
                 )}
               </button>
+              {research.summary ? (
+                <button
+                  onClick={() => void saveSummaryToStuff()}
+                  disabled={savingSummaryToStuff}
+                  className="btn-ghost text-sm py-2 px-5 font-bold disabled:opacity-50"
+                >
+                  {savingSummaryToStuff ? "Saving..." : "Save to My Stuff"}
+                </button>
+              ) : null}
             </div>
           </div>
 
@@ -1240,14 +1541,15 @@ Synthesize these into ONE clear, comprehensive summary:
 };
 
 const TABS: { id: PlaygroundTabId; label: string; description: string }[] = [
-  { id: "chat", label: "AI Chat", description: "Conversational chat" },
-  { id: "ideas", label: "Idea Generator", description: "Generate and save ideas" },
-  { id: "research", label: "Research", description: "Multi-model comparison" },
+  { id: "chat", label: "AI Chat", description: "" },
+  { id: "ideas", label: "Idea Generator", description: "" },
+  { id: "research", label: "Research", description: "" },
 ];
 
 const AiPlaygroundPanel = () => {
   const user = useAppStore((state) => state.user);
   const appSettings = useAppStore((state) => state.appSettings);
+  const selectedProject = useAppStore((state) => state.selectedProject);
   const activeTab = usePlaygroundStore((state) => state.activeTab);
   const setActiveTab = usePlaygroundStore((state) => state.setActiveTab);
   const hydrateForUser = usePlaygroundStore((state) => state.hydrateForUser);
@@ -1288,9 +1590,22 @@ const AiPlaygroundPanel = () => {
     <div className="flex flex-col gap-0" style={{ minHeight: "calc(100vh - 80px)" }}>
       <ModuleHeader title="AI Playground" description="Powered by your API vault" icon="AI">
         <div className="flex items-center gap-2">
+          {selectedProject ? (
+            <Link
+              to={`/projects/${selectedProject.id}`}
+              className="inline-flex max-w-full min-w-0 items-center rounded-full border border-stroke bg-surface px-3 py-1.5 text-xs text-fg-muted transition hover:border-primary/40 hover:text-primary"
+              title="Open active project"
+            >
+              <span className="truncate">Project: {selectedProject.name}</span>
+            </Link>
+          ) : (
+            <span className="px-3 py-1.5 rounded-full bg-surface border border-stroke text-xs text-fg-muted">
+              Project: none
+            </span>
+          )}
           {loadingKeys ? (
-            <span className="flex items-center gap-2 text-xs text-fg-muted">
-              <InlineSpinner /> Loading keys..
+            <span className="flex max-w-full items-center gap-2 text-xs text-fg-muted whitespace-nowrap">
+              <InlineSpinner compact /> <span className="truncate">Loading keys...</span>
             </span>
           ) : (
             <span className="px-3 py-1.5 rounded-full bg-surface border border-stroke text-xs text-fg-muted">
@@ -1306,27 +1621,26 @@ const AiPlaygroundPanel = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-t-lg border-b-2 -mb-px transition whitespace-nowrap ${
-                activeTab === tab.id
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-t-lg border-b-2 -mb-px transition whitespace-nowrap ${activeTab === tab.id
                   ? "border-primary text-primary bg-primary/5"
                   : "border-transparent text-fg-muted hover:text-fg-secondary hover:bg-surface/30"
-              }`}
+                }`}
             >
               {tab.label}
-              {activeTab !== tab.id && (
+              {activeTab !== tab.id && tab.description ? (
                 <span className="hidden sm:block text-[10px] text-fg-muted font-normal">
                   {tab.description}
                 </span>
-              )}
+              ) : null}
             </button>
           ))}
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           {loadingKeys ? (
-            <div className="flex items-center justify-center py-24 gap-3">
-              <InlineSpinner />
-              <span className="text-fg-muted text-sm">Loading API keys...</span>
+            <div className="flex items-center justify-center py-24 gap-3 whitespace-nowrap">
+              <InlineSpinner compact />
+              <span className="min-w-0 truncate text-fg-muted text-sm">Loading API keys...</span>
             </div>
           ) : aiItems.length === 0 ? (
             <NoApiConfigured />

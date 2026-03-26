@@ -6,11 +6,11 @@ export default function DashboardQuickActionsCard() {
   return (
     <div className="glass-panel p-5 space-y-4">
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs text-fg-muted uppercase tracking-widest font-bold">Quick Actions</p>
-          <h3 className="text-sm font-semibold text-fg-secondary mt-2">Boost productivity</h3>
+        <div className="min-w-0">
+          <p className="text-xs font-bold uppercase tracking-widest text-fg-muted">Quick Actions</p>
+          <h3 className="mt-2 text-sm font-semibold text-fg-secondary text-wrap-balance">Boost productivity</h3>
         </div>
-        <div className="w-9 h-9 rounded-lg border border-stroke/60 bg-panel/10 flex items-center justify-center">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-stroke/60 bg-panel/10">
           ⚡
         </div>
       </div>
@@ -18,7 +18,7 @@ export default function DashboardQuickActionsCard() {
       <div className="grid grid-cols-2 gap-3">
         <button
           type="button"
-          className="rounded-xl border border-stroke/60 bg-panel/10 p-3 text-left hover:bg-surface/30 transition"
+          className="rounded-2xl border border-stroke/60 bg-panel/10 p-3 text-left transition hover:bg-surface/30"
           onClick={() => navigate("/projects")}
         >
           <div className="text-base">➕</div>
@@ -27,7 +27,7 @@ export default function DashboardQuickActionsCard() {
         </button>
         <button
           type="button"
-          className="rounded-xl border border-stroke/60 bg-panel/10 p-3 text-left hover:bg-surface/30 transition"
+          className="rounded-2xl border border-stroke/60 bg-panel/10 p-3 text-left transition hover:bg-surface/30"
           onClick={() => navigate("/meetings")}
         >
           <div className="text-base">🗓️</div>
@@ -36,7 +36,7 @@ export default function DashboardQuickActionsCard() {
         </button>
         <button
           type="button"
-          className="rounded-xl border border-stroke/60 bg-panel/10 p-3 text-left hover:bg-surface/30 transition"
+          className="rounded-2xl border border-stroke/60 bg-panel/10 p-3 text-left transition hover:bg-surface/30"
           onClick={() => navigate("/projects")}
         >
           <div className="text-base">📌</div>
@@ -45,7 +45,7 @@ export default function DashboardQuickActionsCard() {
         </button>
         <button
           type="button"
-          className="rounded-xl border border-stroke/60 bg-panel/10 p-3 text-left hover:bg-surface/30 transition"
+          className="rounded-2xl border border-stroke/60 bg-panel/10 p-3 text-left transition hover:bg-surface/30"
           onClick={() => navigate("/workflows")}
         >
           <div className="text-base">🔁</div>
@@ -56,4 +56,3 @@ export default function DashboardQuickActionsCard() {
     </div>
   );
 }
-

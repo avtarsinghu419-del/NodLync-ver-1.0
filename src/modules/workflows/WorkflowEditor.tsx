@@ -268,12 +268,12 @@ const WorkflowEditor = ({ workflowId, onClose }: Props) => {
           <button
             onClick={handleRun}
             disabled={running || nodes.length === 0}
-            className="px-6 py-2 text-xs font-black tracking-widest uppercase rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50"
+            className="px-6 py-2 text-xs font-black tracking-widest uppercase rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50 whitespace-nowrap"
           >
-            {running ? <InlineSpinner /> : "RUN FLOW"}
+            {running ? <InlineSpinner compact /> : "RUN FLOW"}
           </button>
-          <button onClick={handleSave} disabled={saving} className="btn-primary px-6 py-2 text-xs font-black tracking-widest uppercase">
-            {saving ? <InlineSpinner /> : "DEPLOY & SAVE"}
+          <button onClick={handleSave} disabled={saving} className="btn-primary px-6 py-2 text-xs font-black tracking-widest uppercase whitespace-nowrap">
+            {saving ? <InlineSpinner compact /> : "DEPLOY & SAVE"}
           </button>
         </div>
       </header>

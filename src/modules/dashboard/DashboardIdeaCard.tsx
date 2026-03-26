@@ -13,10 +13,8 @@ const DAILY_IDEAS = [
 
 export default function DashboardIdeaCard() {
   const navigate = useNavigate();
-  
+
   const todayIdea = useMemo(() => {
-    // Determine 'day' using a stable method across sessions for 24 hours.
-    // UTC Midnight is safe.
     const now = new Date();
     const hash = now.getUTCFullYear() * 10000 + now.getUTCMonth() * 100 + now.getUTCDate();
     return DAILY_IDEAS[hash % DAILY_IDEAS.length];
@@ -26,17 +24,18 @@ export default function DashboardIdeaCard() {
     <div className="glass-panel p-5 space-y-4">
       <div className="flex items-center gap-2">
         <span className="text-lg">💡</span>
-        <h3 className="font-semibold text-fg-secondary text-sm">Idea of the Day</h3>
+        <h3 className="min-w-0 text-sm font-semibold text-fg-secondary text-wrap-balance">Idea of the Day</h3>
       </div>
-      
-      <div className="bg-primary/5 border border-primary/20 rounded-xl p-4">
-        <h4 className="font-bold text-fg text-sm mb-1">{todayIdea.title}</h4>
-        <p className="text-xs text-fg-muted leading-relaxed">{todayIdea.description}</p>
+
+      <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+        <h4 className="mb-1 text-sm font-bold text-fg text-wrap-balance">{todayIdea.title}</h4>
+        <p className="overflow-anywhere text-xs leading-relaxed text-fg-muted">{todayIdea.description}</p>
       </div>
 
       <button
+        type="button"
         onClick={() => navigate("/ai-playground")}
-        className="w-full btn-ghost py-2 text-xs font-bold"
+        className="btn-ghost w-full py-2 text-xs font-bold"
       >
         Generate Custom Ideas ✨
       </button>

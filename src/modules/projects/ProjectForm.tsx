@@ -51,17 +51,15 @@ const ProjectForm = ({
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    if (initial) {
-      console.log(
-        "[ProjectForm] Loading project into form:",
-        initial.id,
-        initial.name
-      );
+    if (mode === "create") {
+      setName("");
+      setDescription("");
+      setStatus("draft");
+    } else if (initial) {
       setName(initial.name);
       setDescription(initial.description);
       setStatus(initial.status);
     } else {
-      console.log("[ProjectForm] Clearing form for create mode");
       setName("");
       setDescription("");
       setStatus("draft");
@@ -69,7 +67,7 @@ const ProjectForm = ({
     setValidationError(null);
     setConfirmDelete(false);
     setSaved(false);
-  }, [initial]);
+  }, [initial, mode]);
 
   const mergedOptions: ProjectStatus[] = initial?.status
     ? (Array.from(new Set([...baseStatusOptions, initial.status])) as ProjectStatus[])
@@ -151,7 +149,7 @@ const ProjectForm = ({
                   d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
                 />
               </svg>
-              Full View
+              Open
             </button>
           )}
           {onCancel && mode === "create" && (

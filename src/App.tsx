@@ -24,7 +24,8 @@ import useAppStore from "./store/useAppStore";
 
 function App() {
   const setUser = useAppStore((s) => s.setUser);
-  const [checkingSession, setCheckingSession] = useState(true);
+  const user = useAppStore((s) => s.user);
+  const [checkingSession, setCheckingSession] = useState(() => !useAppStore.getState().user);
 
   // Keep the "is configured" banner logic without importing the full supabase client eagerly.
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -39,10 +40,22 @@ function App() {
 
       const { data, error } = await supabase.auth.getSession();
       if (error) console.error("Session error", error.message);
-      if (data.session?.user) setUser(data.session.user);
+      if (data.session?.user) {
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError || !userData.user) {
+          console.error("Stored session is invalid", userError?.message);
+          await supabase.auth.signOut();
+          setUser(null);
+        } else {
+          setUser(userData.user);
+        }
+      } else {
+        setUser(null);
+      }
 
       const { data: listener } = supabase.auth.onAuthStateChange(
-        (_event: string, session: { user: any } | null) => {
+        (event: string, session: { user: any } | null) => {
+          if (event === "TOKEN_REFRESHED") return;
           setUser(session?.user ?? null);
         }
       );
@@ -57,6 +70,12 @@ function App() {
       unsubscribe?.();
     };
   }, [setUser]);
+
+  useEffect(() => {
+    if (user && checkingSession) {
+      setCheckingSession(false);
+    }
+  }, [user, checkingSession]);
 
   if (checkingSession) {
     return <LoadingScreen message="Initializing session..." />;

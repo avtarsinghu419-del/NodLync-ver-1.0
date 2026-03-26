@@ -7,14 +7,15 @@ export default function DashboardResearchCard() {
     <div className="glass-panel p-5 space-y-4">
       <div className="flex items-center gap-2">
         <span className="text-lg">🔬</span>
-        <h3 className="font-semibold text-fg-secondary text-sm">Research Hub</h3>
+        <h3 className="min-w-0 text-sm font-semibold text-fg-secondary text-wrap-balance">Research Hub</h3>
       </div>
-      <p className="text-xs text-fg-muted leading-relaxed">
+      <p className="overflow-anywhere text-xs leading-relaxed text-fg-muted">
         Compare AI models side-by-side or synthesize an ultimate summary.
       </p>
       <button
+        type="button"
         onClick={() => navigate("/ai-playground")}
-        className="w-full btn-primary py-2 text-xs font-bold"
+        className="btn-primary w-full py-2 text-xs font-bold"
       >
         Open AI Playground
       </button>

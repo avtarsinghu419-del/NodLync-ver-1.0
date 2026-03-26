@@ -47,7 +47,7 @@ const ForgotPasswordPage = () => {
           </label>
           {error && <p className="text-sm text-rose-400 bg-rose-900/30 border border-rose-800 rounded-md px-3 py-2">{error}</p>}
           {message && <p className="text-sm text-emerald-300 bg-emerald-900/30 border border-emerald-800 rounded-md px-3 py-2">{message}</p>}
-          <button type="submit" className="btn-primary w-full" disabled={loading}>
+          <button type="submit" className="btn-primary w-full whitespace-nowrap" disabled={loading}>
             {loading ? "Sending..." : "Send reset link"}
           </button>
         </form>

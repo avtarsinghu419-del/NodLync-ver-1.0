@@ -3,10 +3,9 @@ import { useNavigate } from "react-router-dom";
 
 function buildMonthGrid(year: number, monthIndex: number) {
   const first = new Date(year, monthIndex, 1);
-  const startWeekday = first.getDay(); // 0=Sun
-
+  const startWeekday = first.getDay();
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-  const totalCells = 42; // 6 weeks
+  const totalCells = 42;
 
   const cells: Array<{ day: number | null }> = [];
   for (let i = 0; i < totalCells; i++) {
@@ -23,7 +22,7 @@ export default function DashboardCalendarCard({
 }: {
   highlightedDays: Set<number>;
   year: number;
-  monthIndex: number; // 0-11
+  monthIndex: number;
 }) {
   const navigate = useNavigate();
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
@@ -41,7 +40,6 @@ export default function DashboardCalendarCard({
   const currentDay = today.getDate();
 
   const handleDayClick = (day: number) => {
-    // Only allow clicking today or future relative to today's date
     const clickedDate = new Date(year, monthIndex, day);
     const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     if (clickedDate.getTime() >= todayDate.getTime()) {
@@ -52,20 +50,18 @@ export default function DashboardCalendarCard({
   const goToAddMeeting = () => {
     if (!selectedDay) return;
     const dt = new Date(year, monthIndex, selectedDay);
-    // Format as YYYY-MM-DD for consistency
     const yyyy = dt.getFullYear();
     const mm = String(dt.getMonth() + 1).padStart(2, "0");
     const dd = String(dt.getDate()).padStart(2, "0");
-    const formattedDate = `${yyyy}-${mm}-${dd}`;
-    navigate("/meetings", { state: { createForDate: formattedDate } });
+    navigate("/meetings", { state: { createForDate: `${yyyy}-${mm}-${dd}` } });
   };
 
   return (
     <div className="glass-panel p-5 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
           <span className="text-lg">📅</span>
-          <h3 className="font-semibold text-fg-secondary text-sm">{monthLabel}</h3>
+          <h3 className="min-w-0 text-sm font-semibold text-fg-secondary text-wrap-balance">{monthLabel}</h3>
         </div>
         <div className="flex items-center gap-2">
           <button type="button" className="btn-ghost text-xs" disabled>
@@ -90,9 +86,9 @@ export default function DashboardCalendarCard({
           if (!c.day) {
             return <div key={idx} className="h-9" />;
           }
+
           const isHighlighted = highlightedDays.has(c.day);
           const isToday = isCurrentMonth && c.day === currentDay;
-          
           const clickedDate = new Date(year, monthIndex, c.day);
           const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
           const isPast = clickedDate.getTime() < todayDate.getTime();
@@ -119,7 +115,7 @@ export default function DashboardCalendarCard({
               onClick={() => {
                 if (!isPast || isToday) handleDayClick(c.day!);
               }}
-              className={`h-9 flex items-center justify-center rounded-lg border border-transparent ${bgClasses}`}
+              className={`flex h-9 items-center justify-center rounded-xl border border-transparent ${bgClasses}`}
               title={isToday ? "Today" : isHighlighted ? "Items scheduled" : ""}
             >
               {c.day}
@@ -128,15 +124,15 @@ export default function DashboardCalendarCard({
         })}
       </div>
 
-      {/* Add Schedule option floating/inline below */}
       {selectedDay && (
-        <div className="pt-3 border-t border-stroke/60 flex items-center justify-between animate-in fade-in slide-in-from-top-2">
-          <span className="text-xs text-fg-muted font-medium tracking-wide">
+        <div className="flex items-center justify-between border-t border-stroke/60 pt-3 animate-in fade-in slide-in-from-top-2">
+          <span className="text-xs font-medium tracking-wide text-fg-muted">
             {new Date(year, monthIndex, selectedDay).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
           </span>
-          <button 
+          <button
+            type="button"
             onClick={goToAddMeeting}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-on-primary rounded-lg text-xs font-bold hover:brightness-110 transition active:scale-95"
+            className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 text-xs font-bold text-on-primary transition active:scale-95 hover:brightness-110"
           >
             <span>➕</span> Add Schedule
           </button>

@@ -3,9 +3,9 @@ import {
   createApiVaultItem,
   deleteApiVaultItem,
   getApiVaultItems,
+  revealApiVaultItem,
   type ApiVaultItem,
 } from "../../api/apiVaultApi";
-import { decryptValue } from "../../api/encryptionHelper";
 import BulkDeleteBar from "../../components/BulkDeleteBar";
 import InlineSpinner from "../../components/InlineSpinner";
 import PaginationControls from "../../components/PaginationControls";
@@ -19,16 +19,15 @@ import ApiVaultTable from "./ApiVaultTable";
 
 const ApiVaultPanel = () => {
   const user = useAppStore((s) => s.user);
-  const projectName = useAppStore((s) => s.selectedProject?.name);
 
   const [items, setItems] = useState<ApiVaultItem[]>([]);
   const [decryptedKeys, setDecryptedKeys] = useState<Record<string, string>>({});
+  const [visibleIds, setVisibleIds] = useState<string[]>([]);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [visibleIds, setVisibleIds] = useState<string[]>([]);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [tagFilter, setTagFilter] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -51,7 +50,7 @@ const ApiVaultPanel = () => {
     };
 
     loadItems();
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!copiedId) return;
@@ -80,28 +79,70 @@ const ApiVaultPanel = () => {
     setIsSubmitting(true);
     setErrorMessage(null);
 
-    const { data, error } = await createApiVaultItem({
-      userId: user.id,
-      name: values.name,
-      provider: values.provider,
-      apiKey: values.apiKey,
-      description: values.description,
-      tags: values.tags,
-    });
+    try {
+      const { data, error } = await createApiVaultItem({
+        key_name: values.name,
+        provider: values.provider,
+        apiKey: values.apiKey,
+        description: values.description,
+        tags: values.tags,
+      });
 
-    if (error) {
-      setErrorMessage(error.message ?? "Failed to save API key.");
-      setIsSubmitting(false);
-      return false;
-    } else if (data) {
-      setItems((current) => [data, ...current]);
-      setSavePopupMessage(`"${values.name}" saved to vault.`);
-      setIsModalOpen(false);
-      setIsSubmitting(false);
-      return true;
+      if (error) {
+        setErrorMessage(error.message ?? "Failed to save API key.");
+        setIsSubmitting(false);
+        return false;
+      } else if (data) {
+        setItems((current) => [data, ...current]);
+        setSavePopupMessage(`"${values.name}" saved to secure vault.`);
+        setIsModalOpen(false);
+        setIsSubmitting(false);
+        return true;
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || "Request failed.");
     }
+
     setIsSubmitting(false);
     return false;
+  };
+
+  const handleToggleReveal = async (id: string) => {
+    const isVisible = visibleIds.includes(id);
+    if (isVisible) {
+      setVisibleIds((current) => current.filter((entry) => entry !== id));
+    } else {
+      const item = items.find((i) => i.id === id);
+      if (!item) return;
+      
+      try {
+        const { data, error } = await revealApiVaultItem(id);
+        if (error) {
+          setErrorMessage(error.message || "Reveal failed.");
+        } else if (data) {
+          setDecryptedKeys((prev) => ({ ...prev, [id]: data }));
+          setVisibleIds((current) => [...current, id]);
+        }
+      } catch (err: any) {
+        setErrorMessage(err.message || "Reveal request failed.");
+      }
+    }
+  };
+
+  const handleCopy = async (item: ApiVaultItem) => {
+    try {
+      let value = decryptedKeys[item.id];
+      if (!value) {
+        const { data, error } = await revealApiVaultItem(item.id);
+        if (error) throw new Error(error.message || "Fetch for copy failed.");
+        value = data!;
+        setDecryptedKeys((prev) => ({ ...prev, [item.id]: value }));
+      }
+      await navigator.clipboard.writeText(value);
+      setCopiedId(item.id);
+    } catch (err: any) {
+      setErrorMessage(err.message || "Copy failed.");
+    }
   };
 
   const handleDelete = async (item: ApiVaultItem) => {
@@ -114,11 +155,6 @@ const ApiVaultPanel = () => {
     }
     setItems((current) => current.filter((i) => i.id !== item.id));
     setVisibleIds((current) => current.filter((id) => id !== item.id));
-    setDecryptedKeys((prev) => {
-      const next = { ...prev };
-      delete next[item.id];
-      return next;
-    });
   };
 
   const handleBulkDelete = async () => {
@@ -135,62 +171,19 @@ const ApiVaultPanel = () => {
     }
 
     setItems((current) => current.filter((item) => !selection.selectedIds.has(item.id)));
-    setVisibleIds((current) => current.filter((id) => !selection.selectedIds.has(id)));
-    setDecryptedKeys((prev) => {
-        const next = { ...prev };
-        ids.forEach(id => delete next[id]);
-        return next;
-    });
     selection.clearSelection();
     setBulkDeleting(false);
   };
-
-  const handleToggleReveal = async (id: string) => {
-    const isVisible = visibleIds.includes(id);
-    if (isVisible) {
-      setVisibleIds((current) => current.filter((entry) => entry !== id));
-    } else {
-      const item = items.find((i) => i.id === id);
-      if (!item) return;
-      try {
-        const decoded = await decryptValue(item.api_key, item.initialization_vector);
-        setDecryptedKeys((prev) => ({ ...prev, [id]: decoded }));
-        setVisibleIds((current) => [...current, id]);
-      } catch (err) {
-        setErrorMessage("Decryption failed. The key might be incompatible.");
-      }
-    }
-  };
-
-  const handleCopy = async (item: ApiVaultItem) => {
-    try {
-      let value = decryptedKeys[item.id];
-      if (!value) {
-        value = await decryptValue(item.api_key, item.initialization_vector);
-        setDecryptedKeys((prev) => ({ ...prev, [item.id]: value }));
-      }
-      await navigator.clipboard.writeText(value);
-      setCopiedId(item.id);
-    } catch {
-      setErrorMessage("Copy failed. Try revealing and copying manually.");
-    }
-  };
-
-  // Map items for table to use decrypted values where revealed
-  const displayItems = pagination.paginatedItems.map(item => ({
-      ...item,
-      api_key: decryptedKeys[item.id] || item.api_key
-  }));
 
   return (
     <>
       <div className="space-y-6">
         <ModuleHeader
           title="API Vault"
-          description="STORE, SEARCH, REVEAL, AND MANAGE PROVIDER KEYS"
-          icon="🔑"
+          description="PRODUCTION-GRADE SECURE VAULT WITH REVEAL & COPY"
+          icon="🛡️"
         >
-          <span className="text-xs text-fg-muted mr-2">Project context: {projectName ?? "Pick a project"}</span>
+          <span className="text-xs text-fg-muted mr-2">Keys are server-side encrypted.</span>
           <button type="button" className="btn-primary py-2 text-sm font-bold" onClick={() => setIsModalOpen(true)}>
             Add API Key
           </button>
@@ -238,8 +231,9 @@ const ApiVaultPanel = () => {
           />
 
           {errorMessage ? (
-            <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-              {errorMessage}
+            <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200 flex justify-between items-center group">
+              <span>{errorMessage}</span>
+              <button onClick={() => setErrorMessage(null)} className="opacity-0 group-hover:opacity-100 hover:text-fg transition">x</button>
             </div>
           ) : null}
 
@@ -258,12 +252,12 @@ const ApiVaultPanel = () => {
             </div>
           ) : (
             <ApiVaultTable
-              items={displayItems}
+              items={pagination.paginatedItems}
+              decryptedKeys={decryptedKeys}
               visibleIds={new Set(visibleIds)}
               selectedIds={selection.selectedIds}
               allSelected={pageState.checked}
               indeterminate={pageState.indeterminate}
-              deletingId={null}
               copiedId={copiedId}
               onToggleAll={() => selection.togglePage(pagination.paginatedItems)}
               onToggleSelect={selection.toggleOne}

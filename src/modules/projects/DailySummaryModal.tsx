@@ -109,19 +109,19 @@ const DailySummaryModal = ({ isOpen, onClose, userId }: Props) => {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-panel/80 px-4 backdrop-blur-md">
-      <div className="glass-panel w-full max-w-4xl flex flex-col max-h-[85vh] border shadow-2xl border-stroke">
-        <div className="p-5 border-b border-stroke flex items-center justify-between bg-panel/50">
+      <div className="glass-panel flex w-full max-w-4xl max-h-[85vh] flex-col border border-stroke shadow-2xl">
+        <div className="flex items-center justify-between border-b border-stroke bg-panel/50 p-5">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center text-primary">
-              📋
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/20 text-primary">
+              {"📋"}
             </div>
-            <h2 className="text-lg font-bold text-fg tracking-tight">Today's Work Summary</h2>
+            <h2 className="text-lg font-bold tracking-tight text-fg">Today's Work Summary</h2>
           </div>
           <div className="flex items-center gap-3">
             {logs.length > 0 && (
               <button
                 onClick={handleCopy}
-                className={`transition duration-200 px-5 py-2 text-sm font-semibold rounded-lg flex items-center gap-2 ${
+                className={`flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold transition duration-200 ${
                   copied
                     ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/20"
                     : "btn-primary shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98]"
@@ -129,60 +129,60 @@ const DailySummaryModal = ({ isOpen, onClose, userId }: Props) => {
               >
                 {copied ? (
                   <>
-                    <span>✓</span> Copied
+                    <span>{"✓"}</span> Copied
                   </>
                 ) : (
                   <>
-                    <span>⎘</span> Copy All
+                    <span>{"⎘"}</span> Copy All
                   </>
                 )}
               </button>
             )}
             <button
               onClick={onClose}
-              className="btn-ghost text-sm px-4 py-2 hover:bg-surface rounded-lg transition-colors"
+              className="btn-ghost rounded-lg px-4 py-2 text-sm transition-colors hover:bg-surface"
             >
               Close
             </button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-0 bg-panel/40 custom-scrollbar">
+        <div className="custom-scrollbar flex-1 overflow-y-auto bg-panel/40 p-0">
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-24 gap-4">
+            <div className="flex flex-col items-center justify-center gap-4 py-24">
               <InlineSpinner />
-              <p className="text-fg-muted text-sm animate-pulse">Aggregating logs across projects...</p>
+              <p className="text-sm text-fg-muted animate-pulse">Aggregating logs across projects...</p>
             </div>
           ) : error ? (
             <div className="p-12 text-center">
-              <div className="text-3xl mb-4">⚠️</div>
-              <p className="text-rose-400 font-medium mb-1">Failed to load logs</p>
-              <p className="text-fg-muted text-sm">{error}</p>
+              <div className="mb-4 text-3xl">{"⚠️"}</div>
+              <p className="mb-1 font-medium text-rose-400">Failed to load logs</p>
+              <p className="text-sm text-fg-muted">{error}</p>
             </div>
           ) : logs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-24 gap-4 opacity-60">
-              <div className="text-4xl">📭</div>
-              <p className="text-fg-muted font-medium">No updates found for today</p>
-              <p className="text-fg-muted text-sm max-w-xs text-center">
+            <div className="flex flex-col items-center justify-center gap-4 py-24 opacity-60">
+              <div className="text-4xl">{"📭"}</div>
+              <p className="font-medium text-fg-muted">No updates found for today</p>
+              <p className="max-w-xs text-center text-sm text-fg-muted">
                 Log some work in your project modules to see them here.
               </p>
             </div>
           ) : (
             <div className="p-6">
-              <div className="text-[13px] text-fg-secondary leading-relaxed bg-black/40 p-8 rounded-xl border border-stroke/50 shadow-inner overflow-x-hidden">
+              <div className="overflow-x-hidden rounded-xl border border-stroke/50 bg-black/40 p-8 text-[13px] leading-relaxed text-fg-secondary shadow-inner">
                 <GeneratedText text={readableText} />
               </div>
             </div>
           )}
         </div>
-        
-        <div className="p-4 border-t border-stroke/50 bg-panel/30 flex justify-between items-center px-6">
-            <p className="text-[10px] text-fg-muted uppercase tracking-widest font-bold">
-                Daily Report Generator
-            </p>
-            <p className="text-[10px] text-fg-muted font-mono">
-                {logs.length} entries found
-            </p>
+
+        <div className="flex items-center justify-between border-t border-stroke/50 bg-panel/30 px-6 py-4">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-fg-muted">
+            Daily Report Generator
+          </p>
+          <p className="font-mono text-[10px] text-fg-muted">
+            {logs.length} entries found
+          </p>
         </div>
       </div>
     </div>

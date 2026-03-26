@@ -1,21 +1,24 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { 
-  getCategories, 
-  createCategory, 
-  deleteCategory, 
-  getItems, 
-  createItem, 
-  deleteItem 
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  getCategories,
+  createCategory,
+  deleteCategory,
+  updateCategory,
+  getItems,
+  createItem,
+  updateItem,
+  deleteItem,
 } from "../api/myStuffApi";
 
-const STUFF_CATS_KEY = ["stuff", "categories"];
-const STUFF_ITEMS_KEY = ["stuff", "items"];
+const MY_STUFF_CATEGORIES_KEY = ["my-stuff-categories"];
+const MY_STUFF_ITEMS_KEY = ["my-stuff-items"];
 
-export function useMyStuff(userId?: string) {
+export function useMyStuff(userId: string | null) {
   const queryClient = useQueryClient();
 
+  // Categories
   const categoriesQuery = useQuery({
-    queryKey: [...STUFF_CATS_KEY, userId],
+    queryKey: [...MY_STUFF_CATEGORIES_KEY, userId],
     queryFn: async () => {
       if (!userId) return [];
       const { data, error } = await getCategories(userId);
@@ -25,8 +28,80 @@ export function useMyStuff(userId?: string) {
     enabled: !!userId,
   });
 
-  const getItemsQuery = (categoryId?: string) => useQuery({
-    queryKey: [...STUFF_ITEMS_KEY, categoryId],
+  const createCategoryMutation = useMutation({
+    mutationFn: createCategory,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: MY_STUFF_CATEGORIES_KEY });
+    },
+  });
+
+  const updateCategoryMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: { name: string } }) => updateCategory(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: MY_STUFF_CATEGORIES_KEY });
+    },
+  });
+
+  const deleteCategoryMutation = useMutation({
+    mutationFn: deleteCategory,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: MY_STUFF_CATEGORIES_KEY });
+    },
+  });
+
+  // Items (by Category)
+  const getItemsForCategory = async (categoryId: string) => {
+    const { data, error } = await getItems(categoryId);
+    if (error) throw new Error(error.message);
+    return data ?? [];
+  };
+
+  const createItemMutation = useMutation({
+    mutationFn: createItem,
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [...MY_STUFF_ITEMS_KEY, variables.category_id] });
+    },
+  });
+
+  const updateItemMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: any }) => updateItem(id, payload),
+    onSuccess: () => {
+      // We don't have category_id in variables directly sometimes if we only partial update
+      // But we can invalidate all items or use a specific pattern
+      queryClient.invalidateQueries({ queryKey: MY_STUFF_ITEMS_KEY });
+    },
+  });
+
+  const deleteItemMutation = useMutation({
+    mutationFn: ({ id }: { id: string; categoryId: string }) => deleteItem(id),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [...MY_STUFF_ITEMS_KEY, variables.categoryId] });
+    },
+  });
+
+  return {
+    categories: categoriesQuery.data ?? [],
+    loadingCategories: categoriesQuery.isLoading,
+    categoriesError: categoriesQuery.error ? (categoriesQuery.error as Error).message : null,
+
+    createCategory: createCategoryMutation.mutateAsync,
+    updateCategory: updateCategoryMutation.mutateAsync,
+    deleteCategory: deleteCategoryMutation.mutateAsync,
+    busyCreatingCategory: createCategoryMutation.isPending,
+
+    createItem: createItemMutation.mutateAsync,
+    updateItem: updateItemMutation.mutateAsync,
+    deleteItem: deleteItemMutation.mutateAsync,
+    busyCreatingItem: createItemMutation.isPending,
+    busyUpdatingItem: updateItemMutation.isPending,
+
+    getItemsForCategory,
+  };
+}
+
+export function useMyStuffItems(categoryId: string | null) {
+  return useQuery({
+    queryKey: [...MY_STUFF_ITEMS_KEY, categoryId],
     queryFn: async () => {
       if (!categoryId) return [];
       const { data, error } = await getItems(categoryId);
@@ -35,54 +110,4 @@ export function useMyStuff(userId?: string) {
     },
     enabled: !!categoryId,
   });
-
-  const categoryMutation = useMutation({
-    mutationFn: (name: string) => {
-      if (!userId) throw new Error("No user ID");
-      return createCategory({ name, user_id: userId });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [...STUFF_CATS_KEY, userId] });
-    },
-  });
-
-  const itemMutation = useMutation({
-    mutationFn: (payload: { categoryId: string; title: string; url: string; description: string }) => {
-      if (!userId) throw new Error("No user ID");
-      return createItem({
-        user_id: userId,
-        category_id: payload.categoryId,
-        title: payload.title,
-        url: payload.url,
-        description: payload.description,
-      });
-    },
-    onSuccess: (_res, variables) => {
-      queryClient.invalidateQueries({ queryKey: [...STUFF_ITEMS_KEY, variables.categoryId] });
-    },
-  });
-
-  const deleteCatMutation = useMutation({
-    mutationFn: (id: string) => deleteCategory(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [...STUFF_CATS_KEY, userId] });
-    },
-  });
-
-  const deleteItemMutation = useMutation({
-    mutationFn: ({ id }: { id: string; categoryId: string }) => deleteItem(id),
-    onSuccess: (_res, variables) => {
-      queryClient.invalidateQueries({ queryKey: [...STUFF_ITEMS_KEY, variables.categoryId] });
-    },
-  });
-
-  return {
-    categories: categoriesQuery.data ?? [],
-    loadingCategories: categoriesQuery.isLoading,
-    addCategory: (name: string) => categoryMutation.mutateAsync(name),
-    deleteCategory: (id: string) => deleteCatMutation.mutateAsync(id),
-    getItemsQuery,
-    addItem: (p: any) => itemMutation.mutateAsync(p),
-    deleteItem: (p: { id: string; categoryId: string }) => deleteItemMutation.mutateAsync(p),
-  };
 }

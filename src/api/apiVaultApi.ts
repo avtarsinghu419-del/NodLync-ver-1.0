@@ -1,134 +1,179 @@
 import { supabase } from "./supabaseClient";
-import { encryptValue } from "./encryptionHelper";
-import { handleApiResponse, type ApiResponse } from "./apiHelper";
+import { type ApiResponse } from "./apiHelper";
+
+/**
+ * Production API Vault API backed by `api_keys` and the `ai-proxy` edge function.
+ */
 
 export interface ApiVaultItem {
   id: string;
   user_id: string;
   key_name: string;
   provider: string;
-  api_key: string;
-  initialization_vector: string;
-  description: string | null;
-  tags: string | null;
   created_at: string | null;
+  description?: string | null;
+  tags?: string | null;
 }
 
 export interface CreateApiVaultInput {
-  userId: string;
-  name: string;
+  key_name: string;
   provider: string;
   apiKey: string;
   description?: string;
   tags?: string;
 }
 
-const TABLE_NAME = "api_key_items";
+const TABLE_NAME = "api_keys";
 
-const selectColumns =
-  "Id,UserId,Name,Provider,EncryptedValue,InitializationVector,Description,Tags,CreatedAt";
-
-function normalizeItem(row: Record<string, unknown>): ApiVaultItem {
-  return {
-    id: String(row.Id ?? row.id ?? ""),
-    user_id: String(row.UserId ?? row.user_id ?? ""),
-    key_name: String(row.Name ?? row.key_name ?? row.name ?? ""),
-    provider: String(row.Provider ?? row.provider ?? ""),
-    api_key: String(
-      row.EncryptedValue ?? row.api_key ?? row.apiKey ?? row.secret ?? ""
-    ),
-    initialization_vector: String(row.InitializationVector ?? row.initialization_vector ?? "plain-text"),
-    description:
-      typeof row.Description === "string"
-        ? row.Description
-        : typeof row.description === "string"
-          ? row.description
-          : row.description == null && row.Description == null
-            ? null
-            : String(row.Description ?? row.description),
-    tags:
-      typeof row.Tags === "string"
-        ? row.Tags
-        : typeof row.tags === "string"
-          ? row.tags
-          : row.tags == null && row.Tags == null
-            ? null
-            : String(row.Tags ?? row.tags),
-    created_at:
-      typeof row.CreatedAt === "string"
-        ? row.CreatedAt
-        : typeof row.created_at === "string"
-          ? row.created_at
-          : row.created_at == null && row.CreatedAt == null
-            ? null
-            : String(row.CreatedAt ?? row.created_at),
-  };
+async function tryParseJson(text: string): Promise<any | null> {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }
 
-function isJwtExpiredError(error: any) {
-  return error?.message?.toLowerCase().includes("jwt expired") ?? false;
-}
+async function extractFunctionErrorMessage(error: any): Promise<string> {
+  const directJson = error?.context?.json;
+  if (directJson) {
+    const nested = directJson.error ?? directJson.message;
+    if (typeof nested === "string" && nested.trim()) return nested;
+  }
 
-async function withAuthRetry<T>(
-  operation: () => Promise<{ data: T | null; error: any | null }>
-): Promise<ApiResponse<T>> {
-  let result = await operation();
+  const directBody = error?.context?.body;
+  if (typeof directBody === "string" && directBody.trim()) {
+    const parsed = await tryParseJson(directBody);
+    const nested = parsed?.error ?? parsed?.message ?? directBody;
+    if (typeof nested === "string" && nested.trim()) return nested;
+  }
 
-  if (isJwtExpiredError(result.error)) {
-    const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-    if (!refreshError && refreshData.session) {
-      result = await operation();
+  const response = error?.response ?? error?.context;
+  if (response && (typeof response.text === "function" || typeof response.json === "function")) {
+    try {
+      const clone = typeof response.clone === "function" ? response.clone() : response;
+      if (typeof clone.json === "function") {
+        const json = await clone.json();
+        const nested = json?.error ?? json?.message;
+        if (typeof nested === "string" && nested.trim()) return nested;
+      }
+    } catch {
+      // ignore JSON parse failures
+    }
+
+    try {
+      const clone = typeof response.clone === "function" ? response.clone() : response;
+      if (typeof clone.text === "function") {
+        const text = await clone.text();
+        const parsed = await tryParseJson(text);
+        const nested = parsed?.error ?? parsed?.message ?? text;
+        if (typeof nested === "string" && nested.trim()) return nested;
+      }
+    } catch {
+      // ignore text parse failures
     }
   }
 
-  // Use handleApiResponse for standardize logging and error wrapper
-  const standard = await handleApiResponse<T>(Promise.resolve(result as any));
-  return standard;
+  const message = error?.message;
+  if (typeof message === "string" && message.trim()) return message;
+  return "Request failed.";
+}
+
+async function invokeVaultFunction<T>(body: Record<string, unknown>): Promise<ApiResponse<T>> {
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
+
+  if (sessionError) return { data: null, error: sessionError };
+  if (!session?.access_token) return { data: null, error: { message: "Not authenticated." } as any };
+
+  const { data, error } = await supabase.functions.invoke("ai-proxy", {
+    headers: {
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+    },
+    body: {
+      ...body,
+      userJwt: session.access_token,
+    },
+  });
+
+  if (error) {
+    const message = await extractFunctionErrorMessage(error);
+    console.error("Vault function error", error);
+    return { data: null, error: { ...error, message } };
+  }
+
+  if (data?.error || data?.message) {
+    const message =
+      (typeof data.error === "string" && data.error.trim()) ||
+      (typeof data.message === "string" && data.message.trim()) ||
+      "Request failed.";
+    return { data: null, error: { message } as any };
+  }
+
+  return { data: (data?.data ?? null) as T, error: null };
 }
 
 export async function getApiVaultItems(userId: string): Promise<ApiResponse<ApiVaultItem[]>> {
-  const op = () => supabase
+  const { data, error } = await supabase
     .from(TABLE_NAME)
-    .select(selectColumns)
-    .eq("UserId", userId)
-    .order("CreatedAt", { ascending: false });
+    .select("id, user_id, name, provider, description, tags, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
 
-  const res = await withAuthRetry<any[]>(op as any);
-  if (res.data) {
-     return {
-        data: res.data.map(item => normalizeItem(item as Record<string, unknown>)),
-        error: null
-     };
-  }
-  return { data: null, error: res.error };
+  if (error) return { data: null, error };
+
+  const rows = (data as any[]) ?? [];
+  return {
+    data: rows.map((item: any) => ({
+      id: String(item.id),
+      user_id: String(item.user_id),
+      key_name: String(item.name),
+      provider: String(item.provider || ""),
+      description: item.description,
+      tags: item.tags,
+      created_at: item.created_at,
+    })),
+    error: null,
+  };
 }
 
 export async function createApiVaultItem(input: CreateApiVaultInput): Promise<ApiResponse<ApiVaultItem>> {
-  const { encrypted, iv } = await encryptValue(input.apiKey);
+  const { data, error } = await invokeVaultFunction<any>({
+    action: "save-key",
+    name: input.key_name,
+    provider: input.provider,
+    apiKey: input.apiKey,
+    description: input.description,
+    tags: input.tags,
+  });
 
-  const payload = {
-    UserId: input.userId,
-    Name: input.name,
-    Provider: input.provider,
-    EncryptedValue: encrypted,
-    InitializationVector: iv,
-    Description: input.description?.trim() || null,
-    Tags: input.tags?.trim() || null,
-  };
-
-  const op = () => supabase.from(TABLE_NAME).insert(payload).select(selectColumns).single();
-  const res = await withAuthRetry<any>(op as any);
+  if (error) return { data: null, error };
   
-  if (res.data) {
-    return {
-      data: normalizeItem(res.data),
-      error: null
-    };
-  }
-  return { data: null, error: res.error };
+  const record = data;
+  return {
+    data: {
+      id: String(record.Id || record.id),
+      user_id: String(record.UserId || record.user_id),
+      key_name: String(record.Name || record.name),
+      provider: String(record.Provider || record.provider || ""),
+      description: record.Description || record.description,
+      tags: record.Tags || record.tags,
+      created_at: record.CreatedAt || record.created_at
+    },
+    error: null
+  };
+}
+
+export async function revealApiVaultItem(id: string): Promise<ApiResponse<string>> {
+  return invokeVaultFunction<string>({
+    action: "reveal-key",
+    keyId: id,
+  });
 }
 
 export async function deleteApiVaultItem(id: string): Promise<ApiResponse<null>> {
-  const op = () => supabase.from(TABLE_NAME).delete().eq("Id", id);
-  return await withAuthRetry<null>(op as any);
+  const { error } = await supabase.from(TABLE_NAME).delete().eq("id", id);
+  return { data: null, error };
 }

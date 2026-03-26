@@ -1,0 +1,25 @@
+# NodLync Project Requirements (Updated: 2026-03-26)
+# This project is built using React + Vite + Supabase.
+# Install dependencies using: npm install
+
+# Core Dependencies
+@supabase/supabase-js>=2.99.2
+@tanstack/react-query>=5.95.0
+axios>=1.13.6
+react>=19.2.4
+react-dom>=19.2.4
+react-router-dom>=7.13.1
+reactflow>=11.11.4
+zustand>=5.0.12
+
+# Tooling & Development
+vite>=8.0.0
+typescript>=5.9.3
+tailwindcss>=3.4.14
+autoprefixer>=10.4.27
+postcss>=8.5.8
+eslint>=9.39.4
+typescript-eslint>=8.56.1
+@eslint/js>=9.39.4
+@vitejs/plugin-react>=6.0.0
+globals>=17.4.0

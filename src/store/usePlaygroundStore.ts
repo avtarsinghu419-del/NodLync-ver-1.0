@@ -12,6 +12,13 @@ export interface PlaygroundIdeaItem {
 
 export type PlaygroundColumnStatus = "idle" | "loading" | "success" | "error";
 
+export interface PlaygroundModelRunState {
+  id: string;
+  status: PlaygroundColumnStatus;
+  response: string;
+  error: string | null;
+}
+
 export interface PlaygroundResearchColumn {
   id: string;
   apiId: string;
@@ -19,6 +26,7 @@ export interface PlaygroundResearchColumn {
   status: PlaygroundColumnStatus;
   response: string;
   error: string | null;
+  runToken?: string;
 }
 
 export interface PlaygroundChatState {
@@ -129,6 +137,7 @@ const usePlaygroundStore = create<PlaygroundState>()(
         state.research.columns = state.research.columns.map((col) => ({
           ...col,
           status: col.status === "loading" ? "idle" : col.status,
+          runToken: undefined,
         }));
       },
     }

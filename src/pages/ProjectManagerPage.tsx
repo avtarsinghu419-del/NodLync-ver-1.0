@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { useLocation, useParams, useSearchParams } from "react-router-dom";
 import { getProjects } from "../api/projectsApi";
 import { supabase } from "../api/supabaseClient";
@@ -6,6 +6,7 @@ import { getMilestones, createMilestone, updateMilestone, deleteMilestone, type 
 import { getTaskItems, createTaskItem, updateTaskItem, deleteTaskItem, type TaskItem } from "../api/tasksApi";
 import { getProjectLogs, getAllProjectLogs, getProjectLogsPage, createProjectLog, type ProjectLog } from "../api/logsApi";
 import { createProjectReport } from "../api/reportsApi";
+import { createUserItem } from "../api/userItemsApi";
 import InlineSpinner from "../components/InlineSpinner";
 import ProjectHeader from "../modules/projects/manager/ProjectHeader";
 import ProjectTabs, { type TabId } from "../modules/projects/manager/ProjectTabs";
@@ -19,6 +20,8 @@ import useAppStore from "../store/useAppStore";
 import type { Project } from "../types";
 import { formatDateTime } from "../utils/format";
 import { useMembers } from "../hooks/useMembers";
+import { getErrorMessage } from "../utils/errors";
+import { logAppEvent } from "../utils/appLogger";
 
 const PROJECT_TABS: TabId[] = ["overview", "milestones", "tasks", "reports", "team", "history"];
 
@@ -404,7 +407,8 @@ const ProjectManagerPage = () => {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const [, setSearchParams] = useSearchParams();
-  const { user } = useAppStore();
+  const user = useAppStore((state) => state.user);
+  const userId = user?.id ?? null;
 
   const [project, setProject] = useState<Project | null>(null);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
@@ -422,6 +426,7 @@ const ProjectManagerPage = () => {
   const [historyTotal, setHistoryTotal] = useState(0);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [manualRefreshPending, setManualRefreshPending] = useState(false);
+  const [savingToStuff, setSavingToStuff] = useState(false);
   const [workLogDraft, setWorkLogDraft] = useState({
     completed: "",
     next_steps: "",
@@ -461,6 +466,7 @@ const ProjectManagerPage = () => {
     () => milestones.map((milestone) => ({ ...milestone, item_type: "milestone" } as any)),
     [milestones]
   );
+  const lastHistoryRequestRef = useRef<{ page: number; tab: TabId } | null>(null);
 
   useEffect(() => {
     const tabFromUrl = new URLSearchParams(location.search).get("tab");
@@ -483,12 +489,12 @@ const ProjectManagerPage = () => {
   );
 
   const loadAll = useCallback(async () => {
-    if (!id || !user) return;
+    if (!id || !userId) return;
     setLoading(true);
     setPageError(null);
     try {
       const [pRes, mRes, tRes, lRes] = await Promise.all([
-        getProjects(user.id),
+        getProjects(userId),
         getMilestones(id),
         getTaskItems(id),
         getProjectLogs(id),
@@ -517,7 +523,7 @@ const ProjectManagerPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [id, user]);
+  }, [id, userId]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -535,11 +541,22 @@ const ProjectManagerPage = () => {
   }, [historyPageSize, id]);
 
   useEffect(() => {
-    if (activeTab === "history") {
-      setHistoryPage(1);
-      loadHistory(1);
+    if (activeTab !== "history") {
+      lastHistoryRequestRef.current = null;
+      return;
     }
-  }, [activeTab, loadHistory]);
+
+    if (historyPage !== 1) {
+      setHistoryPage(1);
+      return;
+    }
+
+    const lastRequest = lastHistoryRequestRef.current;
+    if (lastRequest?.tab === "history" && lastRequest.page === historyPage) return;
+
+    lastHistoryRequestRef.current = { page: historyPage, tab: "history" };
+    void loadHistory(historyPage);
+  }, [activeTab, historyPage, loadHistory]);
 
   const handleManualRefresh = useCallback(async () => {
     setManualRefreshPending(true);
@@ -795,12 +812,29 @@ const ProjectManagerPage = () => {
                     await loadHistory(p);
                   }}
                   onDeleteSelected={async (ids) => {
-                    const resp = await supabase.from("project_logs").delete().in("id", ids);
-                    if (resp.error) throw resp.error;
-                    await loadHistory(historyPage);
-                    const updatedLogs = await getProjectLogs(project.id);
-                    if (updatedLogs.error) throw updatedLogs.error;
-                    setLogs(updatedLogs.data || []);
+                    try {
+                      const resp = await supabase.from("project_logs").delete().in("id", ids);
+                      if (resp.error) throw resp.error;
+                      await loadHistory(historyPage);
+                      const updatedLogs = await getProjectLogs(project.id);
+                      if (updatedLogs.error) throw updatedLogs.error;
+                      setLogs(updatedLogs.data || []);
+                      void logAppEvent({
+                        type: "success",
+                        module: "project.logs",
+                        message: `Deleted ${ids.length} project log(s).`,
+                        projectId: project.id,
+                      });
+                    } catch (error) {
+                      console.error("Failed to delete selected project logs", error);
+                      void logAppEvent({
+                        type: "error",
+                        module: "project.logs",
+                        message: getErrorMessage(error, "Failed to delete project logs."),
+                        projectId: project.id,
+                      });
+                      window.alert(getErrorMessage(error, "Failed to delete project logs."));
+                    }
                   }}
                   onExportSelected={(ids) => {
                     const selected = historyLogs.filter(l => ids.includes(l.id));
@@ -899,6 +933,34 @@ const ProjectManagerPage = () => {
             window.alert("Report generation failed. Check console for details.");
           }
         }} 
+        onSaveToStuff={async () => {
+          if (!user || !project) return;
+          setSavingToStuff(true);
+          try {
+            const response = await createUserItem({
+              user_id: user.id,
+              type: "template",
+              title: project.name,
+              description: project.description || "Saved project snapshot from NodLync.",
+              data: {
+                route: `/projects/${project.id}`,
+                projectId: project.id,
+                projectName: project.name,
+                status: project.status,
+                progress,
+                source: "projects",
+              },
+              tags: ["project", project.status, "template"],
+            });
+            if (response.error) throw new Error(response.error.message);
+            window.alert("Saved to My Stuff.");
+          } catch (error: any) {
+            window.alert(error?.message ?? "Failed to save to My Stuff.");
+          } finally {
+            setSavingToStuff(false);
+          }
+        }}
+        savingToStuff={savingToStuff}
         onAddUpdate={() => handleTabChange('overview')} 
       />
 

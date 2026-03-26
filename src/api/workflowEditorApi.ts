@@ -100,6 +100,7 @@ export async function createWorkflowV2(payload: {
   user_id: string;
   workflow_type?: "visual" | "imported";
   json_data?: any;
+  projectId?: string;
 }): Promise<ApiResponse<WorkflowV2>> {
   const workflowType = payload.workflow_type ?? "visual";
   const now = new Date().toISOString();
@@ -108,14 +109,21 @@ export async function createWorkflowV2(payload: {
       ? `${WORKFLOW_JSON_SENTINEL}${JSON.stringify(payload.json_data)}`
       : undefined;
 
+  const baseJson =
+    payload.json_data ??
+    (workflowType === "visual" ? { nodes: [], edges: [] } : {});
+
+  const json_data =
+    payload.projectId && baseJson && typeof baseJson === "object" && !Array.isArray(baseJson)
+      ? { ...baseJson, __nodlync: { ...(baseJson as any).__nodlync, projectId: payload.projectId } }
+      : baseJson;
+
   let workflowPayload: Record<string, any> = {
     id: crypto.randomUUID(),
     name: payload.name,
     user_id: payload.user_id,
     workflow_type: workflowType,
-    json_data:
-      payload.json_data ??
-      (workflowType === "visual" ? { nodes: [], edges: [] } : {}),
+    json_data,
     description: workflowType === "imported" ? compatJsonText : undefined,
     created_at: now,
     updated_at: now,

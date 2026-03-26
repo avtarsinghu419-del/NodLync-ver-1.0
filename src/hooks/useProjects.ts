@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import useAppStore from "../store/useAppStore";
 import { getProjects, createProject, updateProject, deleteProject } from "../api/projectsApi";
 import type { Project, ProjectStatus } from "../types";
-import { useEffect } from "react";
 
 const PROJECTS_KEY = ["projects"];
 
@@ -17,7 +16,6 @@ export function useProjects() {
     setSelectedProject,
     isCreateMode,
     setIsCreateMode,
-    setProjects, // Sync with global store
   } = useAppStore();
 
   const {
@@ -35,11 +33,6 @@ export function useProjects() {
     },
     enabled: !!user,
   });
-
-  // Keep global store in sync for components that still rely on it
-  useEffect(() => {
-    setProjects(projects);
-  }, [projects, setProjects]);
 
   // Create Mutation with Optimistic Update
   const createMutation = useMutation({

@@ -58,19 +58,9 @@ export default function ModuleHeader({
             title={refreshLabel}
             className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-stroke bg-panel/60 text-fg-secondary transition hover:border-primary/40 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <svg
-              className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M4 4v5h5M20 20v-5h-5M5.64 18.36A9 9 0 103.5 9m15 6a9 9 0 01-14.86 3.36"
-              />
-            </svg>
+            <span className={`text-lg leading-none ${refreshing ? "animate-spin" : ""}`}>
+              ⭮
+            </span>
           </button>
         )}
         {children}

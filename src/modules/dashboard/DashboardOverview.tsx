@@ -1,17 +1,19 @@
+import { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { useDashboard } from "../../hooks/useDashboard";
 import DashboardActiveProjectsOverview from "./DashboardActiveProjectsOverview";
-import DashboardCalendarCard from "./DashboardCalendarCard";
 import DashboardAiInsightsCard from "./DashboardAiInsightsCard";
-import DashboardResearchCard from "./DashboardResearchCard";
+import DashboardCalendarCard from "./DashboardCalendarCard";
 import DashboardIdeaCard from "./DashboardIdeaCard";
 import DashboardQuickActionsCard from "./DashboardQuickActionsCard";
-import DashboardStatCard from "./DashboardStatCard";
+import DashboardResearchCard from "./DashboardResearchCard";
+import DashboardSkeleton from "./DashboardSkeleton";
+import MetricCard from "./MetricCard";
 import DashboardUpcomingTasksCard from "./DashboardUpcomingTasksCard";
 import DashboardWorkflowsCard from "./DashboardWorkflowsCard";
-import DashboardSkeleton from "./DashboardSkeleton";
-import { useDashboard } from "../../hooks/useDashboard";
-import { useMemo } from "react";
 
 export default function DashboardOverview() {
+  const navigate = useNavigate();
   const {
     totalProjectsCount,
     activeTaskCount,
@@ -22,6 +24,7 @@ export default function DashboardOverview() {
     workflows,
     loading,
     initialLoad,
+    error,
   } = useDashboard();
 
   const now = useMemo(() => new Date(), []);
@@ -29,85 +32,93 @@ export default function DashboardOverview() {
   const calendarMonthIndex = now.getMonth();
 
   const highlightedDays = useMemo(() => {
-    const s = new Set<number>();
+    const set = new Set<number>();
     upcomingTasks.forEach(({ task }) => {
       if (!task.deadline) return;
       const dt = new Date(task.deadline);
       if (dt.getFullYear() === calendarYear && dt.getMonth() === calendarMonthIndex) {
-        s.add(dt.getDate());
+        set.add(dt.getDate());
       }
     });
-    return s;
+    return set;
   }, [upcomingTasks, calendarYear, calendarMonthIndex]);
 
-  if (initialLoad) {
-    return <DashboardSkeleton />;
-  }
+  if (initialLoad) return <DashboardSkeleton />;
 
   return (
     <div className="space-y-6">
-      {/* Dashboard Stats Grid - Optimized for all screen sizes */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <DashboardStatCard
-          icon={<span className="text-lg">📁</span>}
-          label="Total Projects"
+      {error ? (
+        <div className="glass-panel rounded-2xl border border-rose-800/40 bg-rose-950/30 px-5 py-4 text-sm text-rose-200 overflow-anywhere">
+          {error}
+        </div>
+      ) : null}
+
+      {totalProjectsCount === 0 ? (
+        <div className="glass-panel p-6 text-center space-y-4 sm:p-10">
+          <p className="text-lg font-bold text-fg-secondary text-wrap-balance">No projects yet</p>
+          <p className="mx-auto max-w-xl text-sm text-fg-muted text-wrap-balance">
+            Create a project to unlock tasks, logs, workflows, and dashboards.
+          </p>
+          <button className="btn-primary px-5 py-2.5 text-sm" onClick={() => navigate("/projects")}>
+            Go to Projects
+          </button>
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard
+          icon="📁"
+          title="Total Projects"
           value={totalProjectsCount}
-          tone="primary"
-          meta={""}
+          color="primary"
+          onClick={() => navigate("/projects")}
         />
-        <DashboardStatCard
-          icon={<span className="text-lg">✅</span>}
-          label="Active Tasks"
+        <MetricCard
+          icon="✅"
+          title="Active Tasks"
           value={activeTaskCount}
-          tone="emerald"
+          color="emerald"
+          onClick={() => navigate("/projects")}
         />
-        <DashboardStatCard
-          icon={<span className="text-lg">📅</span>}
-          label="Meetings Today"
+        <MetricCard
+          icon="🗓️"
+          title="Meetings Today"
           value={String(meetingsTodayCount).padStart(2, "0")}
-          tone="amber"
+          color="amber"
+          onClick={() => navigate("/meetings")}
         />
-        <DashboardStatCard
-          icon={<span className="text-lg">📈</span>}
-          label="Completion Rate"
+        <MetricCard
+          icon="📈"
+          title="Completion Rate"
           value={`${completionRate.toFixed(1)}%`}
-          tone="primary"
+          color="primary"
+          onClick={() => navigate("/projects")}
         />
       </div>
 
-      {/* Main Dashboard Layout Grid */}
-      {/* Mobile: 1 col, Tablet: 2 cols (lg), Desktop: 3 cols (xl) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-12 gap-6">
-        {/* Left Column (Main Focus) */}
-        <div className="space-y-6 xl:col-span-5 lg:col-span-1">
-          <DashboardActiveProjectsOverview
-            rows={activeProjectRows}
-            onViewAll={() => {
-              // Placeholder behavior
-            }}
-          />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-12">
+        <div className="space-y-6 xl:col-span-5">
+          <DashboardActiveProjectsOverview rows={activeProjectRows} onViewAll={() => navigate("/projects")} />
           <DashboardUpcomingTasksCard tasks={upcomingTasks} />
         </div>
 
-        {/* Middle Column (Operational) */}
-        <div className="space-y-6 xl:col-span-4 lg:col-span-1">
+        <div className="space-y-6 xl:col-span-4">
           <DashboardWorkflowsCard workflows={workflows} />
           <DashboardCalendarCard highlightedDays={highlightedDays} year={calendarYear} monthIndex={calendarMonthIndex} />
         </div>
 
-        {/* Right Column (Insights & Actions) */}
         <div className="space-y-6 xl:col-span-3 lg:col-span-2">
-           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-6">
-              <DashboardAiInsightsCard />
-              <DashboardIdeaCard />
-              <DashboardResearchCard />
-              <DashboardQuickActionsCard />
-           </div>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-1">
+            <DashboardAiInsightsCard />
+            <DashboardIdeaCard />
+            <DashboardResearchCard />
+            <DashboardQuickActionsCard />
+          </div>
         </div>
       </div>
 
       {loading && !initialLoad ? (
-        <div className="fixed top-4 right-4 bg-primary text-on-primary text-xs font-bold px-3 py-1.5 rounded-full shadow-lg animate-pulse z-50">
+        <div className="fixed right-4 top-4 z-50 animate-pulse rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-on-primary shadow-lg">
           Refreshing Data...
         </div>
       ) : null}

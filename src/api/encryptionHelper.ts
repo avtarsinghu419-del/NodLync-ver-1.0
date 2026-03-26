@@ -72,6 +72,8 @@ export async function decryptValue(encryptedBase64: string, ivBase64: string): P
     return new TextDecoder().decode(decrypted);
   } catch (err) {
     console.error('Decryption failed:', err);
-    throw new Error('Could not decrypt value. It may have been encrypted with a different key.');
+    throw new Error(
+      "Could not decrypt value. This key was encrypted with a different browser/device key (or your local storage was cleared). Delete and re-add the key in API Vault on this device."
+    );
   }
 }

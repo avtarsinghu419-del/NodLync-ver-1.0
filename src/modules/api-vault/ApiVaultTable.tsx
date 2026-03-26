@@ -1,14 +1,14 @@
-﻿import type { ApiVaultItem } from "../../api/apiVaultApi";
+import type { ApiVaultItem } from "../../api/apiVaultApi";
 import IndeterminateCheckbox from "../../components/IndeterminateCheckbox";
 import ApiVaultRow from "./ApiVaultRow";
 
 interface ApiVaultTableProps {
   items: ApiVaultItem[];
+  decryptedKeys: Record<string, string>;
   visibleIds: Set<string>;
   selectedIds: Set<string>;
   allSelected: boolean;
   indeterminate: boolean;
-  deletingId: string | null;
   copiedId: string | null;
   onToggleAll: () => void;
   onToggleSelect: (id: string) => void;
@@ -19,11 +19,11 @@ interface ApiVaultTableProps {
 
 const ApiVaultTable = ({
   items,
+  decryptedKeys,
   visibleIds,
   selectedIds,
   allSelected,
   indeterminate,
-  deletingId,
   copiedId,
   onToggleAll,
   onToggleSelect,
@@ -48,7 +48,6 @@ const ApiVaultTable = ({
               <th className="px-4 py-3 font-medium">Name</th>
               <th className="px-4 py-3 font-medium">Provider</th>
               <th className="px-4 py-3 font-medium">Description</th>
-              <th className="px-4 py-3 font-medium">Tags</th>
               <th className="px-4 py-3 font-medium">Created At</th>
               <th className="px-4 py-3 font-medium text-right">Actions</th>
             </tr>
@@ -58,10 +57,10 @@ const ApiVaultTable = ({
               <ApiVaultRow
                 key={item.id}
                 item={item}
+                decryptedKey={decryptedKeys[item.id]}
                 isSelected={selectedIds.has(item.id)}
                 isVisible={visibleIds.has(item.id)}
-                isDeleting={deletingId === item.id}
-                copyFeedback={copiedId === item.id ? "Copied to clipboard." : null}
+                copyFeedback={copiedId === item.id ? "Copied" : null}
                 onToggleSelect={() => onToggleSelect(item.id)}
                 onToggleReveal={() => onToggleReveal(item.id)}
                 onCopy={() => onCopy(item)}
@@ -76,4 +75,3 @@ const ApiVaultTable = ({
 };
 
 export default ApiVaultTable;
-

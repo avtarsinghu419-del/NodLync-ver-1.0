@@ -44,6 +44,16 @@ export async function deleteCategory(id: string): Promise<ApiResponse<null>> {
   return handleApiResponse<null>(promise as any);
 }
 
+export async function updateCategory(id: string, payload: { name: string }): Promise<ApiResponse<MyStuffCategory>> {
+  const promise = supabase
+    .from("my_stuff_categories")
+    .update(payload)
+    .eq("id", id)
+    .select(CAT_SELECT)
+    .single();
+  return handleApiResponse<MyStuffCategory>(promise as any);
+}
+
 export async function getItems(categoryId: string): Promise<ApiResponse<MyStuffItem[]>> {
   const promise = supabase
     .from("my_stuff_items")
@@ -57,6 +67,16 @@ export async function createItem(payload: Omit<MyStuffItem, "id" | "created_at">
   const promise = supabase
     .from("my_stuff_items")
     .insert(payload)
+    .select(ITEM_SELECT)
+    .single();
+  return handleApiResponse<MyStuffItem>(promise as any);
+}
+
+export async function updateItem(id: string, payload: Partial<Omit<MyStuffItem, "id" | "user_id" | "created_at">>): Promise<ApiResponse<MyStuffItem>> {
+  const promise = supabase
+    .from("my_stuff_items")
+    .update(payload)
+    .eq("id", id)
     .select(ITEM_SELECT)
     .single();
   return handleApiResponse<MyStuffItem>(promise as any);

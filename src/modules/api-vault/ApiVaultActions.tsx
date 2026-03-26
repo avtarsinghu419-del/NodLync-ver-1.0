@@ -1,6 +1,5 @@
 interface ApiVaultActionsProps {
   isVisible: boolean;
-  isDeleting: boolean;
   onToggleReveal: () => void;
   onCopy: () => void;
   onDelete: () => void;
@@ -8,26 +7,35 @@ interface ApiVaultActionsProps {
 
 const ApiVaultActions = ({
   isVisible,
-  isDeleting,
   onToggleReveal,
   onCopy,
   onDelete,
 }: ApiVaultActionsProps) => {
   return (
-    <div className="flex flex-wrap items-center justify-end gap-2">
-      <button type="button" onClick={onToggleReveal} className="btn-ghost px-3 py-1.5 text-xs">
+    <div className="flex items-center justify-end gap-2 pr-2">
+      <button 
+        type="button" 
+        onClick={onToggleReveal} 
+        title={isVisible ? "Hide Key" : "Reveal Key"}
+        className="btn-ghost p-1.5 text-xs text-fg-muted hover:text-primary transition"
+      >
         {isVisible ? "Hide" : "Reveal"}
       </button>
-      <button type="button" onClick={onCopy} className="btn-ghost px-3 py-1.5 text-xs">
-        Copy API Key
+      <button 
+        type="button" 
+        onClick={onCopy} 
+        title="Copy to clipboard"
+        className="btn-ghost p-1.5 text-xs text-fg-muted hover:text-emerald-400 transition"
+      >
+        Copy
       </button>
       <button
         type="button"
         onClick={onDelete}
-        className="inline-flex items-center justify-center rounded-lg border border-rose-500/30 px-3 py-1.5 text-xs text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-60"
-        disabled={isDeleting}
+        title="Delete Item"
+        className="inline-flex items-center justify-center rounded-lg border border-rose-800/40 p-1.5 text-[10px] font-bold uppercase tracking-widest text-rose-300 transition hover:bg-rose-500/10 hover:border-rose-500/60"
       >
-        {isDeleting ? "Deleting..." : "Delete"}
+        Delete
       </button>
     </div>
   );

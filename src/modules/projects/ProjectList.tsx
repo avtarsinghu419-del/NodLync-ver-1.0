@@ -1,4 +1,3 @@
-import { useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import BulkDeleteBar from "../../components/BulkDeleteBar";
 import IndeterminateCheckbox from "../../components/IndeterminateCheckbox";
@@ -7,7 +6,7 @@ import PaginationControls from "../../components/PaginationControls";
 import { useBulkSelection } from "../../hooks/useBulkSelection";
 import { usePagination } from "../../hooks/usePagination";
 import type { Project } from "../../types";
-import StatusBadge from "../../components/StatusBadge";
+import ProjectRow from "./ProjectRow";
 
 interface Props {
   projects: Project[];
@@ -32,21 +31,6 @@ const ProjectList = ({
   const pagination = usePagination(projects);
   const selection = useBulkSelection(projects, (project) => project.id);
   const pageState = selection.getPageState(pagination.paginatedItems);
-  const clickTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-
-  const handleClick = (project: Project) => {
-    if (clickTimers.current[project.id]) {
-      clearTimeout(clickTimers.current[project.id]);
-      delete clickTimers.current[project.id];
-      navigate(`/projects/${project.id}`);
-      return;
-    }
-
-    clickTimers.current[project.id] = setTimeout(() => {
-      delete clickTimers.current[project.id];
-      onSelect(project);
-    }, 250);
-  };
 
   const handleBulkDelete = async () => {
     if (selection.selectedCount === 0) return;
@@ -57,11 +41,16 @@ const ProjectList = ({
   };
 
   return (
-    <div className="glass-panel h-full flex flex-col">
-      <div className="flex items-center justify-between border-b border-stroke px-4 py-3 gap-3">
+    <div className="glass-panel relative z-0 flex h-full flex-col">
+      <div className="flex items-center justify-between gap-3 border-b border-stroke px-4 py-3">
         <p className="font-semibold">Projects</p>
-        <button className="btn-primary text-sm" onClick={onCreate} title="Create a new project">
-          + New
+        <button
+          type="button"
+          className="btn-primary relative z-10 text-sm"
+          onClick={onCreate}
+          title="Create a new project"
+        >
+          + New Project
         </button>
       </div>
 
@@ -87,80 +76,37 @@ const ProjectList = ({
         </div>
       ) : null}
 
-      <div className="flex-1 overflow-y-auto divide-y divide-slate-800 mt-3">
+      <div className="mt-3 flex-1 space-y-3 overflow-y-auto px-4 pb-4">
         {loading ? (
-          <div className="p-4 flex items-center gap-2 text-sm text-fg-muted">
+          <div className="flex items-center gap-2 p-4 text-sm text-fg-muted">
             <InlineSpinner />
             <span>Loading projects...</span>
           </div>
         ) : null}
 
         {!loading && projects.length === 0 ? (
-          <div className="p-6 text-sm text-fg-muted space-y-3 flex flex-col items-center text-center">
+          <div className="flex flex-col items-center space-y-3 p-6 text-center text-sm text-fg-muted">
             <div className="text-3xl">Folder</div>
             <p className="font-medium text-fg-secondary">No projects yet</p>
             <p>Create your first project to get started.</p>
-            <button className="btn-primary text-sm" onClick={onCreate}>
+            <button type="button" className="btn-primary text-sm" onClick={onCreate}>
               Create project
             </button>
           </div>
         ) : null}
 
         {!loading
-          ? pagination.paginatedItems.map((project) => {
-              const isSelected = project.id === selectedId;
-              return (
-                <div
-                  key={project.id}
-                  className={`flex items-center gap-3 px-4 py-3 transition duration-150 group relative ${
-                    isSelected ? "bg-primary/10 border-l-2 border-primary" : "hover:bg-surface/70 border-l-2 border-transparent"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selection.isSelected(project.id)}
-                    onChange={() => selection.toggleOne(project.id)}
-                    onClick={(event) => event.stopPropagation()}
-                    className="h-4 w-4 accent-primary"
-                    aria-label={`Select ${project.name}`}
-                  />
-                  <div className="flex-1 flex items-center justify-between gap-3 min-w-0">
-                    <button
-                      className="flex-1 text-left outline-none min-w-0"
-                      onClick={() => handleClick(project)}
-                      title="Single click to edit. Double click to open full view."
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className={`font-medium truncate text-sm ${isSelected ? "text-primary" : "text-fg-secondary"}`}>
-                          {project.name}
-                        </p>
-                        {project.is_shared ? (
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest border border-sky-500/30 bg-sky-500/10 text-sky-300">
-                            Shared
-                          </span>
-                        ) : null}
-                        <StatusBadge status={project.status} />
-                      </div>
-                      {project.description ? (
-                        <p className="text-xs text-fg-muted truncate leading-relaxed">{project.description}</p>
-                      ) : (
-                        <p className="text-[10px] text-fg-muted italic">No description</p>
-                      )}
-                    </button>
-
-                    <button
-                      className="btn-ghost p-2 text-[10px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 transition hover:bg-primary/20 hover:text-primary whitespace-nowrap bg-panel/50 border border-stroke rounded-lg shadow-lg"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/projects/${project.id}`);
-                      }}
-                    >
-                      Open ➔
-                    </button>
-                  </div>
-                </div>
-              );
-            })
+          ? pagination.paginatedItems.map((project) => (
+              <ProjectRow
+                key={project.id}
+                project={project}
+                selected={project.id === selectedId}
+                checked={selection.isSelected(project.id)}
+                onToggleSelected={() => selection.toggleOne(project.id)}
+                onSelect={() => onSelect(project)}
+                onOpen={() => navigate(`/projects/${project.id}`)}
+              />
+            ))
           : null}
       </div>
 
@@ -178,7 +124,8 @@ const ProjectList = ({
             itemLabel="projects"
           />
           <div className="border-t border-stroke px-4 py-2 text-xs text-fg-muted">
-            {projects.length} project{projects.length !== 1 ? "s" : ""} · <span className="text-fg-muted">single click = edit · double click = full view</span>
+            {projects.length} project{projects.length !== 1 ? "s" : ""} ·{" "}
+            <span className="text-fg-muted">single click = select · double click = full view</span>
           </div>
         </>
       ) : null}
@@ -187,4 +134,3 @@ const ProjectList = ({
 };
 
 export default ProjectList;
-

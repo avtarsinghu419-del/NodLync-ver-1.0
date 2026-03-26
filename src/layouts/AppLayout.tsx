@@ -5,11 +5,13 @@ import useAppStore from "../store/useAppStore";
 import { useEffect, useState } from "react";
 import { getProfile, getSettings } from "../api/settingsApi";
 import InlineSpinner from "../components/InlineSpinner";
+import { useProjectBootstrap } from "../hooks/useProjectBootstrap";
 
 const AppLayout = () => {
   const user = useAppStore((s) => s.user);
   const setUserProfile = useAppStore((s) => s.setUserProfile);
   const setAppSettings = useAppStore((s) => s.setAppSettings);
+  useProjectBootstrap();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [globalsLoading, setGlobalsLoading] = useState(true);
   const [globalsError, setGlobalsError] = useState<string | null>(null);
@@ -52,6 +54,9 @@ const AppLayout = () => {
   }, [user, setUserProfile, setAppSettings]);
 
   const appSettings = useAppStore((s) => s.appSettings);
+  const userProfile = useAppStore((s) => s.userProfile);
+  const projectsError = useAppStore((s) => s.projectsError);
+  const hasWarmWorkspaceState = !!appSettings || !!userProfile;
 
   // Apply real theme globally
   useEffect(() => {
@@ -66,7 +71,7 @@ const AppLayout = () => {
     }
   }, [appSettings?.theme]);
 
-  if (globalsLoading) {
+  if (globalsLoading && !hasWarmWorkspaceState) {
     return (
       <div className="flex h-screen items-center justify-center bg-background text-fg-secondary gap-3">
         <InlineSpinner />
@@ -110,9 +115,19 @@ const AppLayout = () => {
 
         <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-6 custom-scrollbar">
           <div className="max-w-[1600px] mx-auto w-full">
+            {globalsLoading && hasWarmWorkspaceState ? (
+              <div className="mb-4 rounded-2xl border border-stroke/60 bg-surface/70 px-4 py-3 text-sm text-fg-muted shadow-sm">
+                Restoring your workspace...
+              </div>
+            ) : null}
             {globalsError && (
               <div className="mb-4 rounded-2xl border border-rose-800/40 bg-rose-950/30 px-5 py-4 text-sm text-rose-200">
                 {globalsError}
+              </div>
+            )}
+            {projectsError && (
+              <div className="mb-4 rounded-2xl border border-rose-800/40 bg-rose-950/30 px-5 py-4 text-sm text-rose-200">
+                {projectsError}
               </div>
             )}
             <RouteErrorBoundary>

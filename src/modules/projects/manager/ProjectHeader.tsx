@@ -9,9 +9,11 @@ interface Props {
   onExport: () => void;
   onGenerateReport: () => void;
   onAddUpdate: () => void;
+  onSaveToStuff?: () => void;
   onRefresh?: () => void;
   refreshing?: boolean;
   saving?: boolean;
+  savingToStuff?: boolean;
 }
 
 const STATUS_DOT: Record<ProjectStatus, string> = {
@@ -27,9 +29,11 @@ const ProjectHeader = ({
   onExport,
   onGenerateReport,
   onAddUpdate,
+  onSaveToStuff,
   onRefresh,
   refreshing = false,
   saving,
+  savingToStuff = false,
 }: Props) => {
   const navigate = useNavigate();
 
@@ -55,7 +59,7 @@ const ProjectHeader = ({
               <span className={`h-2 w-2 rounded-full ${STATUS_DOT[project.status]}`} />
               <StatusBadge status={project.status} />
             </div>
-            {saving && <InlineSpinner />}
+            {saving && <InlineSpinner compact />}
           </div>
 
           <div className="flex max-w-md items-center gap-3">
@@ -80,19 +84,9 @@ const ProjectHeader = ({
             disabled={refreshing}
             title="Refresh project"
           >
-            <svg
-              className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M4 4v5h5M20 20v-5h-5M5.64 18.36A9 9 0 103.5 9m15 6a9 9 0 01-14.86 3.36"
-              />
-            </svg>
+            <span className={`text-lg leading-none ${refreshing ? "animate-spin" : ""}`}>
+              ⭮
+            </span>
             Refresh
           </button>
           <button className="btn-ghost flex items-center gap-1.5 text-sm" onClick={onExport}>
@@ -110,6 +104,15 @@ const ProjectHeader = ({
             </svg>
             Generate Report
           </button>
+          {onSaveToStuff ? (
+            <button
+              className="btn-ghost flex items-center gap-1.5 text-sm"
+              onClick={onSaveToStuff}
+              disabled={savingToStuff}
+            >
+              {savingToStuff ? "Saving..." : "Save to My Stuff"}
+            </button>
+          ) : null}
           <button
             className="btn-primary flex items-center gap-1.5 text-sm"
             onClick={onAddUpdate}

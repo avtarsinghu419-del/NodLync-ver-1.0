@@ -61,10 +61,15 @@ const WorkLogCard = ({ onSubmit, busy, lastSubmitted, value, onChange }: Props) 
   }, [log]);
 
   useEffect(() => {
-    if (value) {
-      setLog(value);
-    }
-  }, [value]);
+    if (!value) return;
+    const same =
+      log.completed === value.completed &&
+      log.next_steps === value.next_steps &&
+      log.blockers === value.blockers &&
+      log.notes === value.notes;
+    if (same) return;
+    setLog(value);
+  }, [value, log]);
 
   const setField =
     (key: LogField) => (event: React.ChangeEvent<HTMLTextAreaElement>) => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ModuleHeader from "../../components/ModuleHeader";
 import {
   createWorkflowV2,
@@ -10,9 +10,12 @@ import WorkflowEditor from "./WorkflowEditor";
 import WorkflowReactFlowView from "./WorkflowReactFlowView";
 import InlineSpinner from "../../components/InlineSpinner";
 import useAppStore from "../../store/useAppStore";
+import { createUserItem } from "../../api/userItemsApi";
 
 const WorkflowsPanel = () => {
-  const { user } = useAppStore();
+  const user = useAppStore((s) => s.user);
+  const projects = useAppStore((s) => s.projects);
+  const selectedProject = useAppStore((s) => s.selectedProject);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [workflows, setWorkflows] = useState<WorkflowV2[]>([]);
@@ -24,6 +27,17 @@ const WorkflowsPanel = () => {
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [showAllProjects, setShowAllProjects] = useState(false);
+  const [savingStuffId, setSavingStuffId] = useState<string | null>(null);
+
+  const activeProjectId = selectedProject?.id ?? null;
+
+  const visibleWorkflows = useMemo(() => {
+    if (showAllProjects || !activeProjectId) return workflows;
+    return workflows.filter(
+      (wf) => (wf.json_data as any)?.__nodlync?.projectId === activeProjectId
+    );
+  }, [activeProjectId, showAllProjects, workflows]);
 
   useEffect(() => {
     if (user) {
@@ -61,6 +75,7 @@ const WorkflowsPanel = () => {
       name: newWorkflowName.trim() || "New Visual Automation",
       user_id: user.id,
       workflow_type: "visual",
+      projectId: activeProjectId ?? undefined,
     });
 
     if (createError) {
@@ -94,6 +109,7 @@ const WorkflowsPanel = () => {
           user_id: user.id,
           workflow_type: "imported",
           json_data: parsed,
+          projectId: activeProjectId ?? undefined,
         });
 
         if (createError) {
@@ -134,6 +150,49 @@ const WorkflowsPanel = () => {
     setDeletingId(null);
   };
 
+  const handleSaveToStuff = async (workflow: WorkflowV2) => {
+    if (!user) return;
+
+    setSavingStuffId(workflow.id);
+    try {
+      const projectId = (workflow.json_data as any)?.__nodlync?.projectId as string | undefined;
+      const projectName = projectId
+        ? projects.find((project) => project.id === projectId)?.name
+        : undefined;
+
+      const response = await createUserItem({
+        user_id: user.id,
+        type: "workflow",
+        title: workflow.name,
+        description: workflow.description || "Saved workflow from NodLync.",
+        data: {
+          route: "/workflows",
+          workflowId: workflow.id,
+          workflowType: workflow.workflow_type ?? "visual",
+          projectId,
+          projectName,
+          workflowJson: workflow.json_data ?? {},
+          source: "workflows",
+        },
+        tags: [
+          "workflow",
+          workflow.workflow_type ?? "visual",
+          ...(projectName ? [projectName.toLowerCase().replace(/\s+/g, "-")] : []),
+        ],
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      window.alert("Workflow saved to My Stuff.");
+    } catch (error: any) {
+      window.alert(error?.message ?? "Failed to save workflow.");
+    } finally {
+      setSavingStuffId(null);
+    }
+  };
+
   if (editingId) {
     return (
       <WorkflowEditor
@@ -154,6 +213,14 @@ const WorkflowsPanel = () => {
         icon="⚡"
       >
         <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowAllProjects((v) => !v)}
+            className="px-4 py-3 border border-stroke bg-panel text-fg font-black tracking-widest uppercase text-[10px] rounded-xl hover:border-primary/40 hover:text-primary transition"
+            title="Toggle project filter"
+          >
+            {showAllProjects ? "All Projects" : "Active Project"}
+          </button>
           <input
             value={newWorkflowName}
             onChange={(event) => setNewWorkflowName(event.target.value)}
@@ -210,11 +277,11 @@ const WorkflowsPanel = () => {
             </div>
           )}
 
-          {loading && workflows.length === 0 ? (
+          {loading && visibleWorkflows.length === 0 ? (
             <div className="p-20 flex justify-center">
               <InlineSpinner />
             </div>
-          ) : workflows.length === 0 ? (
+          ) : visibleWorkflows.length === 0 ? (
             <div className="p-20 border-2 border-dashed border-stroke rounded-3xl text-center space-y-4 opacity-50 grayscale hover:grayscale-0 hover:opacity-100 transition duration-700 group">
               <span className="text-5xl block group-hover:scale-110 transition-transform">
                 Flow
@@ -225,8 +292,12 @@ const WorkflowsPanel = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {workflows.map((workflow) => {
+              {visibleWorkflows.map((workflow) => {
                 const isDeleting = deletingId === workflow.id;
+                const projectId = (workflow.json_data as any)?.__nodlync?.projectId as string | undefined;
+                const projectName = projectId
+                  ? projects.find((p) => p.id === projectId)?.name
+                  : undefined;
 
                 return (
                   <div
@@ -237,6 +308,12 @@ const WorkflowsPanel = () => {
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-2xl">
                           {workflow.workflow_type === "visual" ? "VIS" : "JSON"}
+                        </span>
+                        <span
+                          className="text-[10px] text-fg-muted font-mono truncate max-w-[140px]"
+                          title={projectName ?? "Unassigned"}
+                        >
+                          {projectName ? `Project: ${projectName}` : "Unassigned"}
                         </span>
                         <button
                           onClick={() => void handleDelete(workflow.id)}
@@ -291,6 +368,13 @@ const WorkflowsPanel = () => {
                         <span className="text-[10px] font-black uppercase tracking-widest mt-2 text-fg-muted group-hover/btn:text-fg-secondary">
                           Raw JSON
                         </span>
+                      </button>
+                      <button
+                        onClick={() => void handleSaveToStuff(workflow)}
+                        disabled={savingStuffId === workflow.id}
+                        className="col-span-2 rounded-xl border border-stroke bg-panel px-4 py-3 text-[10px] font-black uppercase tracking-widest text-fg-muted transition hover:border-primary/40 hover:text-primary disabled:opacity-50"
+                      >
+                        {savingStuffId === workflow.id ? "Saving..." : "Save to My Stuff"}
                       </button>
                     </div>
                   </div>

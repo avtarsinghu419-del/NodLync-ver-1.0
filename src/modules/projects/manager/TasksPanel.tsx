@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { TaskItem } from "../../../api/tasksApi";
 import BulkDeleteBar from "../../../components/BulkDeleteBar";
 import IndeterminateCheckbox from "../../../components/IndeterminateCheckbox";
@@ -29,13 +29,42 @@ const STATUS_OPTIONS: Array<{ value: TaskItem["status"]; label: string }> = [
   { value: "done", label: "Done" },
 ];
 
-const TasksPanel = ({ tasks, onAdd, onUpdate, onDelete, onBulkDelete, busy }: Props) => {
+const TasksPanel = ({ tasks, projectId, userId, onAdd, onUpdate, onDelete, onBulkDelete, busy }: Props) => {
   const [input, setInput] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
   const [deadline, setDeadline] = useState<string>("");
   const [savingId, setSavingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "done" | "not_done" | "in_progress">("all");
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const storageKey = `project-manager:tasks:${projectId}:${userId}`;
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (!stored) return;
+      const parsed = JSON.parse(stored);
+      setInput(parsed.input ?? "");
+      setDeadline(parsed.deadline ?? "");
+      setFilter(parsed.filter ?? "all");
+    } catch {
+      // ignore malformed draft
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          input,
+          deadline,
+          filter,
+        })
+      );
+    } catch {
+      // ignore storage failures
+    }
+  }, [storageKey, input, deadline, filter]);
 
   const formatDeadline = (d: string | null | undefined) => {
     if (!d) return null;
@@ -68,6 +97,7 @@ const TasksPanel = ({ tasks, onAdd, onUpdate, onDelete, onBulkDelete, busy }: Pr
     });
     setInput("");
     setDeadline("");
+    localStorage.removeItem(storageKey);
   };
 
   const handleUpdate = async (

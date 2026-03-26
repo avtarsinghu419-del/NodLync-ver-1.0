@@ -1,13 +1,12 @@
-﻿import type { ApiVaultItem } from "../../api/apiVaultApi";
+import type { ApiVaultItem } from "../../api/apiVaultApi";
 import { formatDateTime } from "../../utils/format";
 import ApiVaultActions from "./ApiVaultActions";
-import { maskApiKey, normalizeTagList } from "./apiVaultUtils";
 
 interface ApiVaultRowProps {
   item: ApiVaultItem;
+  decryptedKey?: string;
   isSelected: boolean;
   isVisible: boolean;
-  isDeleting: boolean;
   copyFeedback: string | null;
   onToggleSelect: () => void;
   onToggleReveal: () => void;
@@ -17,19 +16,17 @@ interface ApiVaultRowProps {
 
 const ApiVaultRow = ({
   item,
+  decryptedKey,
   isSelected,
   isVisible,
-  isDeleting,
   copyFeedback,
   onToggleSelect,
   onToggleReveal,
   onCopy,
   onDelete,
 }: ApiVaultRowProps) => {
-  const tags = normalizeTagList(item.tags);
-
   return (
-    <tr className="border-t border-stroke align-top">
+    <tr className="border-t border-stroke align-top group hover:bg-surface/40 transition-colors">
       <td className="px-4 py-4">
         <input
           type="checkbox"
@@ -39,40 +36,33 @@ const ApiVaultRow = ({
           aria-label={`Select ${item.key_name}`}
         />
       </td>
-      <td className="px-4 py-4 text-sm font-medium text-fg">{item.key_name}</td>
-      <td className="px-4 py-4 text-sm text-fg-secondary">{item.provider}</td>
-      <td className="px-4 py-4 text-sm text-fg-muted">
-        <div className="max-w-xs">
-          <p>{item.description?.trim() || "No description provided."}</p>
-          <p className="mt-2 font-mono text-xs text-fg-muted break-all">
-            {isVisible ? item.api_key : maskApiKey(item.api_key)}
-          </p>
-          {copyFeedback ? <p className="mt-2 text-xs text-emerald-400">{copyFeedback}</p> : null}
-        </div>
-      </td>
+      <td className="px-4 py-4 text-sm font-semibold text-fg-secondary">{item.key_name}</td>
       <td className="px-4 py-4">
-        <div className="flex flex-wrap gap-2">
-          {tags.length === 0 ? (
-            <span className="rounded-full border border-stroke px-2 py-1 text-xs text-fg-muted">
-              No tags
-            </span>
-          ) : (
-            tags.map((tag) => (
-              <span
-                key={`${item.id}-${tag}`}
-                className="rounded-full border border-primary/20 bg-primary/10 px-2 py-1 text-xs text-primary"
-              >
-                {tag}
-              </span>
-            ))
-          )}
+        <span className="text-[10px] px-2 py-0.5 bg-primary/10 border border-primary/20 text-primary rounded-full font-bold uppercase tracking-wider">
+          {item.provider}
+        </span>
+      </td>
+      <td className="px-4 py-4 text-sm text-fg-muted">
+        <div className="max-w-xs overflow-hidden">
+          <p className="line-clamp-1 opacity-70 mb-2">{item.description || "No description."}</p>
+          <div className="font-mono text-xs break-all flex items-center gap-2">
+            {isVisible ? (
+              <span className="text-emerald-400">{decryptedKey || "Decrypting..."}</span>
+            ) : (
+              <span className="tracking-widest opacity-40">••••••••••••••••</span>
+            )}
+            {copyFeedback ? (
+               <span className="text-[10px] text-emerald-500 font-bold uppercase">{copyFeedback}</span>
+            ) : null}
+          </div>
         </div>
       </td>
-      <td className="px-4 py-4 text-sm text-fg-muted">{formatDateTime(item.created_at ?? undefined)}</td>
+      <td className="px-4 py-4 text-xs font-mono text-fg-muted">
+        {formatDateTime(item.created_at ?? undefined)}
+      </td>
       <td className="px-4 py-4">
         <ApiVaultActions
           isVisible={isVisible}
-          isDeleting={isDeleting}
           onToggleReveal={onToggleReveal}
           onCopy={onCopy}
           onDelete={onDelete}
@@ -83,4 +73,3 @@ const ApiVaultRow = ({
 };
 
 export default ApiVaultRow;
-

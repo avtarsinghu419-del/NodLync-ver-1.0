@@ -19,12 +19,12 @@ export default function DashboardUpcomingTasksCard({
 }) {
   return (
     <div className="glass-panel p-5 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
           <span className="text-lg">🕒</span>
-          <h3 className="font-semibold text-fg-secondary text-sm">Upcoming Tasks</h3>
+          <h3 className="min-w-0 text-sm font-semibold text-fg-secondary text-wrap-balance">Upcoming Tasks</h3>
         </div>
-        <span className="text-[10px] text-fg-muted font-mono">{tasks.length} items</span>
+        <span className="shrink-0 text-[10px] font-mono text-fg-muted">{tasks.length} items</span>
       </div>
 
       {tasks.length === 0 ? (
@@ -38,12 +38,12 @@ export default function DashboardUpcomingTasksCard({
             return (
               <li
                 key={row.task.id}
-                className="flex items-start gap-3 rounded-lg border border-stroke/50 bg-panel/10 px-3 py-2"
+                className="flex items-start gap-3 rounded-2xl border border-stroke/50 bg-panel/10 px-3 py-2"
               >
                 <span className="w-2 h-2 mt-2 rounded-full bg-primary/80" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm text-fg font-medium truncate">
+                    <p className="min-w-0 truncate text-sm font-medium text-fg">
                       {row.task.title}
                     </p>
                     {due ? (
@@ -64,4 +64,3 @@ export default function DashboardUpcomingTasksCard({
     </div>
   );
 }
-

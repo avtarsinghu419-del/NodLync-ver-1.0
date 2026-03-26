@@ -6,6 +6,7 @@ import { getProjects } from "../api/projectsApi";
 import { listFolders, listWorkflows } from "../api/workflowsApi";
 import { useMemo } from "react";
 import type { Project } from "../types";
+import { getErrorMessage } from "../utils/errors";
 
 export interface ActiveProjectRow {
   project: Project;
@@ -30,7 +31,11 @@ export function useDashboard() {
   const user = useAppStore((s) => s.user);
 
   // 0. Base: Projects
-  const { data: projects = [], isLoading: projectsLoading } = useQuery({
+  const {
+    data: projects = [],
+    isLoading: projectsLoading,
+    error: projectsQueryError,
+  } = useQuery({
     queryKey: ["projects", user?.id],
     queryFn: async () => {
       if (!user) return [];
@@ -43,13 +48,23 @@ export function useDashboard() {
   });
 
   // 1. Critical: Tasks for Active Projects
-  const { data: projectTaskData = [], isLoading: tasksLoading } = useQuery({
-    queryKey: ["dashboard", "projects", "tasks", projects.map(p => p.id)],
+  const projectIdsKey = useMemo(
+    () => projects.map((p) => p.id).slice().sort(),
+    [projects]
+  );
+
+  const {
+    data: projectTaskData = [],
+    isLoading: tasksLoading,
+    error: tasksQueryError,
+  } = useQuery({
+    queryKey: ["dashboard", "projects", "tasks", projectIdsKey],
     queryFn: async () => {
       const activeProjects = projects.filter((p) => p.status === "active").slice(0, 4);
       return Promise.all(
         activeProjects.map(async (p) => {
-          const { data } = await getTaskItems(p.id);
+          const { data, error } = await getTaskItems(p.id);
+          if (error) throw new Error(error.message);
           const tasks = data ?? [];
           const total = tasks.length;
           const done = tasks.filter((t) => t.status === "done").length;
@@ -77,10 +92,15 @@ export function useDashboard() {
   });
 
   // 2. Secondary: Meetings
-  const { data: meetings = [], isLoading: meetingsLoading } = useQuery({
+  const {
+    data: meetings = [],
+    isLoading: meetingsLoading,
+    error: meetingsQueryError,
+  } = useQuery({
     queryKey: ["dashboard", "meetings", user?.id],
     queryFn: async () => {
-      const { data } = await getMeetings(user!.id);
+      const { data, error } = await getMeetings(user!.id);
+      if (error) throw new Error(error.message);
       return data ?? [];
     },
     enabled: !!user,
@@ -88,13 +108,19 @@ export function useDashboard() {
   });
 
   // 3. Lazy: Workflows
-  const { data: workflows = [], isLoading: workflowsLoading } = useQuery({
+  const {
+    data: workflows = [],
+    isLoading: workflowsLoading,
+    error: workflowsQueryError,
+  } = useQuery({
     queryKey: ["dashboard", "workflows", user?.id],
     queryFn: async () => {
-      const { data: folders } = await listFolders();
+      const { data: folders, error: foldersError } = await listFolders();
+      if (foldersError) throw new Error(foldersError.message);
       const folder = (folders ?? [])[0];
       if (folder?.id) {
-        const { data: wfData } = await listWorkflows(folder.id);
+        const { data: wfData, error: wfError } = await listWorkflows(folder.id);
+        if (wfError) throw new Error(wfError.message);
         return wfData ?? [];
       }
       return [];
@@ -157,5 +183,18 @@ export function useDashboard() {
     loading: projectsLoading || tasksLoading,
     secondaryLoading: meetingsLoading || workflowsLoading,
     initialLoad: (projectsLoading || tasksLoading) && projects.length === 0,
+    error:
+      (projectsQueryError as any) ||
+      (tasksQueryError as any) ||
+      (meetingsQueryError as any) ||
+      (workflowsQueryError as any)
+        ? getErrorMessage(
+            projectsQueryError ??
+              tasksQueryError ??
+              meetingsQueryError ??
+              workflowsQueryError,
+            "Failed to load dashboard data."
+          )
+        : null,
   };
 }

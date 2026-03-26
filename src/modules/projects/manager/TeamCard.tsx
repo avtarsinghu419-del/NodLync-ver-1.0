@@ -97,18 +97,26 @@ const TeamCard = ({
 
   useEffect(() => {
     if (!shouldShowDropdown || !anchorRef.current) {
-      setDropdownPosition(null);
+      setDropdownPosition((current) => (current === null ? current : null));
       return;
     }
 
     const updatePosition = () => {
       if (!anchorRef.current) return;
       const rect = anchorRef.current.getBoundingClientRect();
-      setDropdownPosition({
+      const next = {
         top: rect.bottom + 12,
         left: rect.left,
         width: rect.width,
-      });
+      };
+      setDropdownPosition((current) =>
+        current &&
+        current.top === next.top &&
+        current.left === next.left &&
+        current.width === next.width
+          ? current
+          : next
+      );
     };
 
     updatePosition();
@@ -220,7 +228,7 @@ const TeamCard = ({
             <div className="max-h-60 overflow-y-auto p-2 custom-scrollbar">
               {searching ? (
                 <div className="px-4 py-5 text-sm text-fg-muted flex items-center gap-3">
-                  <InlineSpinner />
+                  <InlineSpinner compact />
                   <span>Searching users...</span>
                 </div>
               ) : searchError ? (
@@ -302,7 +310,7 @@ const TeamCard = ({
                   />
                   {searching && (
                     <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                      <InlineSpinner />
+                      <InlineSpinner compact />
                     </div>
                   )}
                 </div>
@@ -337,7 +345,7 @@ const TeamCard = ({
                   onClick={handleAdd}
                   className="w-full py-3.5 rounded-xl bg-primary text-on-primary font-black tracking-widest uppercase text-[10px] hover:brightness-110 shadow-lg shadow-primary/20 transition disabled:opacity-30 active:scale-95"
                 >
-                  {busy ? <InlineSpinner /> : "Grant"}
+                  {busy ? <InlineSpinner compact /> : "Grant"}
                 </button>
               </div>
             </div>

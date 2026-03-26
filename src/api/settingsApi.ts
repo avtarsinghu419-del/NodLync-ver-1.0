@@ -1,28 +1,7 @@
 import { supabase } from "./supabaseClient";
+import type { AppLogRow, AppSettings, UserProfile } from "../types";
 
-export interface UserProfile {
-  id: string; // references auth.users UUID
-  display_name: string;
-  avatar_url: string;
-}
 
-export interface AppSettings {
-  id: string;
-  user_id: string;
-  theme: string;
-  default_ai_provider: string;
-  notifications_enabled: boolean;
-  auto_update_enabled: boolean;
-}
-
-export interface AppLog {
-  id: string;
-  user_id: string;
-  action: string;
-  status: 'success' | 'error' | 'info';
-  details: string | any;
-  created_at: string;
-}
 
 // ── Profile ──
 export async function getProfile(userId: string) {
@@ -93,7 +72,7 @@ export async function updateSettings(userId: string, payload: Partial<AppSetting
 // ── Logs ──
 export async function getLogs(userId: string) {
   const { data, error } = await supabase.from("app_logs").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(100);
-  return { data: (data ?? []) as AppLog[], error };
+  return { data: (data ?? []) as AppLogRow[], error };
 }
 
 export async function clearLogs(userId: string) {

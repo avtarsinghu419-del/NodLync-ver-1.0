@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
+import ProjectCreateModal from "../modules/projects/ProjectCreateModal";
 import ProjectForm from "../modules/projects/ProjectForm";
 import ProjectList from "../modules/projects/ProjectList";
-import type { ProjectStatus } from "../types";
 import DailySummaryModal from "../modules/projects/DailySummaryModal";
 import ModuleHeader from "../components/ModuleHeader";
 import { useProjects } from "../hooks/useProjects";
+import type { ProjectStatus } from "../types";
 
 const ProjectsPage = () => {
   const {
@@ -12,19 +13,18 @@ const ProjectsPage = () => {
     loading,
     error,
     selectedProject,
-    isCreateMode,
     fetchProjects,
     handleCreate,
     handleUpdate,
     handleDelete,
     setSelectedProject,
-    setIsCreateMode,
     user,
   } = useProjects();
 
   const [formBusy, setFormBusy] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   useEffect(() => {
     fetchProjects();
@@ -36,8 +36,12 @@ const ProjectsPage = () => {
     status: ProjectStatus;
   }) => {
     setFormBusy(true);
-    await handleCreate(payload);
-    setFormBusy(false);
+    try {
+      await handleCreate(payload);
+      setShowCreateModal(false);
+    } finally {
+      setFormBusy(false);
+    }
   };
 
   const onEditProject = async (payload: {
@@ -47,58 +51,85 @@ const ProjectsPage = () => {
   }) => {
     if (!selectedProject) return;
     setFormBusy(true);
-    await handleUpdate(selectedProject.id, payload);
-    setFormBusy(false);
+    try {
+      await handleUpdate(selectedProject.id, payload);
+    } finally {
+      setFormBusy(false);
+    }
   };
 
   const onDeleteSelected = async (ids: string[]) => {
     setBulkDeleting(true);
-    for (const id of ids) {
-      await handleDelete(id);
+    try {
+      for (const id of ids) {
+        await handleDelete(id);
+      }
+    } finally {
+      setBulkDeleting(false);
     }
-    setBulkDeleting(false);
   };
 
   return (
-    <div className="flex flex-col gap-6 h-full pb-12">
-      {/* Page Header */}
-      <ModuleHeader title="Projects" description="WORKSPACE" icon="🚀">
+    <div className="flex h-full flex-col gap-6 pb-12">
+      <ModuleHeader title="Projects" description="WORKSPACE" icon={"📁"}>
         <button
-          className="px-5 py-2.5 bg-surface hover:bg-surface text-fg rounded-lg text-sm font-semibold transition duration-200 border border-stroke flex items-center gap-2 shadow-lg shadow-black/40 hover:scale-[1.02] active:scale-[0.98]"
+          type="button"
+          className="flex items-center gap-2 rounded-lg border border-stroke bg-surface px-5 py-2.5 text-sm font-semibold text-fg shadow-lg shadow-black/40 transition duration-200 hover:scale-[1.02]"
           onClick={() => setShowSummary(true)}
           title="Daily log summary"
         >
-          <span className="text-emerald-400">📊</span> Summary
+          <span className="text-emerald-400">{"📊"}</span> Today's Summary
         </button>
       </ModuleHeader>
 
-      {/* Main Grid: Projects List + Selection/Form */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 flex-1 min-h-0">
-        <div className="lg:col-span-5 h-full min-h-[400px]">
+      <div className="grid grid-cols-1 gap-8 min-h-0 flex-1 lg:grid-cols-12">
+        <div className="h-full min-h-[400px] lg:col-span-5">
           <ProjectList
             projects={projects}
             selectedId={selectedProject?.id}
             onSelect={setSelectedProject}
-            onCreate={() => setIsCreateMode(true)}
+            onCreate={() => setShowCreateModal(true)}
             onDeleteSelected={onDeleteSelected}
             loading={loading}
             bulkDeleting={bulkDeleting}
           />
         </div>
 
-        <div className="lg:col-span-7 h-full">
-          <ProjectForm
-            key={selectedProject?.id || "create"}
-            mode={isCreateMode ? "create" : "edit"}
-            initial={selectedProject}
-            onSubmit={isCreateMode ? onAddProject : onEditProject}
-            onDelete={async () => { if (selectedProject) await handleDelete(selectedProject.id); }}
-            onCancel={() => setIsCreateMode(false)}
-            busy={formBusy}
-            error={error}
-          />
+        <div className="h-full lg:col-span-7">
+          {selectedProject ? (
+            <ProjectForm
+              key={selectedProject.id}
+              mode="edit"
+              initial={selectedProject}
+              onSubmit={onEditProject}
+              onDelete={async () => {
+                await handleDelete(selectedProject.id);
+              }}
+              onCancel={() => setSelectedProject(null)}
+              busy={formBusy}
+              error={error}
+            />
+          ) : (
+            <div className="glass-panel flex h-full items-center justify-center p-8 text-center">
+              <div className="max-w-md space-y-3">
+                <div className="text-4xl">Folder</div>
+                <h2 className="text-xl font-semibold text-fg-secondary">Select a project to edit</h2>
+                <p className="text-sm text-fg-muted">
+                  Choose a project from the list or start a new one with the create button.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      <ProjectCreateModal
+        isOpen={showCreateModal}
+        busy={formBusy}
+        error={error}
+        onClose={() => setShowCreateModal(false)}
+        onSubmit={onAddProject}
+      />
 
       {showSummary && user && (
         <DailySummaryModal isOpen={showSummary} onClose={() => setShowSummary(false)} userId={user.id} />

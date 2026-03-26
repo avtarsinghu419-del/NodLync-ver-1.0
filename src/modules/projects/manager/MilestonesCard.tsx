@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Milestone } from "../../../api/milestonesApi";
 import BulkDeleteBar from "../../../components/BulkDeleteBar";
 import IndeterminateCheckbox from "../../../components/IndeterminateCheckbox";
@@ -17,12 +17,41 @@ interface Props {
   busy?: boolean;
 }
 
-const MilestonesCard = ({ milestones, onAdd, onToggle, onDelete, onBulkDelete, busy }: Props) => {
+const MilestonesCard = ({ milestones, projectId, userId, onAdd, onToggle, onDelete, onBulkDelete, busy }: Props) => {
   const [adding, setAdding] = useState(false);
   const [input, setInput] = useState("");
   const [deadline, setDeadline] = useState<string>("");
   const [savingId, setSavingId] = useState<string | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const storageKey = `project-manager:milestones:${projectId}:${userId}`;
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (!stored) return;
+      const parsed = JSON.parse(stored);
+      setInput(parsed.input ?? "");
+      setDeadline(parsed.deadline ?? "");
+      setAdding(Boolean(parsed.adding));
+    } catch {
+      // ignore malformed draft
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          input,
+          deadline,
+          adding,
+        })
+      );
+    } catch {
+      // ignore storage failures
+    }
+  }, [storageKey, input, deadline, adding]);
 
   const formatDeadline = (d: string | null | undefined) => {
     if (!d) return null;
@@ -45,6 +74,7 @@ const MilestonesCard = ({ milestones, onAdd, onToggle, onDelete, onBulkDelete, b
     setInput("");
     setDeadline("");
     setAdding(false);
+    localStorage.removeItem(storageKey);
   };
 
   const handleToggle = async (m: Milestone) => {
